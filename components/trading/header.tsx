@@ -1,19 +1,21 @@
 "use client";
 
-import { BookOpen, Settings } from "lucide-react";
+import { BookOpen, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth-provider";
 
 export function Header() {
   const pathname = usePathname();
+  const { session, logout } = useAuth();
 
   const isActive = (path: string) => pathname === path;
 
   const navItems = [
     { href: "/dashboard", label: "대시보드" },
     { href: "/journal", label: "매매 일지" },
-    { href: "/create", label: "새 일지" },
+    ...(session?.canWrite ? [{ href: "/create", label: "새 일지" }] : []),
   ];
 
   return (
@@ -33,7 +35,7 @@ export function Header() {
                 매매 복기 일지
               </span>
               <span className="text-xs text-muted-foreground font-mono bg-secondary px-2 py-0.5 rounded">
-                Demo
+                {session?.label ?? "미인증"}
               </span>
             </div>
           </Link>
@@ -56,16 +58,20 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Settings */}
           <div className="flex items-center gap-2 ml-auto">
             <button
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              aria-label="설정"
+              type="button"
+              onClick={() => logout()}
+              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              aria-label="로그아웃"
             >
-              <Settings className="w-4 h-4" />
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">로그아웃</span>
             </button>
             <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
-              <span className="text-xs font-bold text-primary">나</span>
+              <span className="text-xs font-bold text-primary">
+                {session?.label?.slice(0, 1) ?? "?"}
+              </span>
             </div>
           </div>
         </div>

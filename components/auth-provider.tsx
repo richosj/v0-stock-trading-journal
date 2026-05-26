@@ -2,13 +2,14 @@
 
 import { useState, useEffect, createContext, useContext, ReactNode } from "react";
 import { Lock } from "lucide-react";
-
-const PASSWORD = "0406";
+import type { AuthSession } from "@/lib/auth/shared";
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (password: string) => boolean;
-  logout: () => void;
+  session: AuthSession | null;
+  login: (password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -22,30 +23,60 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Check sessionStorage on mount
-    const auth = sessionStorage.getItem("trading_journal_auth");
-    if (auth === "true") {
-      setIsAuthenticated(true);
-    }
-    setIsLoading(false);
-  }, []);
+  const refreshSession = async () => {
+    try {
+      const response = await fetch("/api/auth/session", {
+        cache: "no-store",
+      });
 
-  const login = (password: string): boolean => {
-    if (password === PASSWORD) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem("trading_journal_auth", "true");
-      return true;
+      if (!response.ok) {
+        setSession(null);
+        return;
+      }
+
+      const payload = await response.json();
+      setSession(payload.session ?? null);
+    } catch {
+      setSession(null);
+    } finally {
+      setIsLoading(false);
     }
-    return false;
   };
 
-  const logout = () => {
-    setIsAuthenticated(false);
-    sessionStorage.removeItem("trading_journal_auth");
+  useEffect(() => {
+    refreshSession();
+  }, []);
+
+  const login = async (password: string): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pin: password }),
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const payload = await response.json();
+      setSession(payload.session ?? null);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+    }).catch(() => null);
+    setSession(null);
   };
 
   if (isLoading) {
@@ -56,24 +87,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!session) {
     return <PasswordScreen onLogin={login} />;
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated: true,
+        session,
+        login,
+        logout,
+        refreshSession,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-function PasswordScreen({ onLogin }: { onLogin: (password: string) => boolean }) {
+function PasswordScreen({
+  onLogin,
+}: {
+  onLogin: (password: string) => Promise<boolean>;
+}) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = onLogin(password);
+    setSubmitting(true);
+    const success = await onLogin(password);
+    setSubmitting(false);
+
     if (!success) {
       setError(true);
       setPassword("");
@@ -108,6 +155,8 @@ function PasswordScreen({ onLogin }: { onLogin: (password: string) => boolean })
                 placeholder="비밀번호"
                 className="w-full rounded-lg border border-border bg-secondary/60 px-4 py-3 text-sm text-foreground text-center tracking-widest placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 autoFocus
+                inputMode="numeric"
+                maxLength={4}
               />
               {error && (
                 <p className="text-loss text-xs mt-2 text-center">
@@ -117,9 +166,10 @@ function PasswordScreen({ onLogin }: { onLogin: (password: string) => boolean })
             </div>
             <button
               type="submit"
+              disabled={submitting}
               className="w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
             >
-              로그인
+              {submitting ? "확인 중..." : "로그인"}
             </button>
           </form>
         </div>

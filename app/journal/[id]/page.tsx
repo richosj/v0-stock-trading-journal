@@ -12,7 +12,7 @@ import {
   createJournalFill,
   deleteJournalFill,
 } from '@/lib/trading-service'
-import { TradingJournal, TradingJournalFill } from '@/lib/supabase'
+import type { TradingJournal, TradingJournalFill } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Pencil, Trash2, Save, X, Plus } from 'lucide-react'
@@ -28,9 +28,12 @@ import {
   sanitizeDecimalInput,
   sanitizeIntegerInput,
 } from '@/lib/trading-calculations'
+import { useAuth } from '@/components/auth-provider'
+import { getOwnerLabel } from '@/lib/auth/shared'
 
 export default function JournalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
+  const { session } = useAuth()
   const [journal, setJournal] = useState<TradingJournal | null>(null)
   const [fills, setFills] = useState<TradingJournalFill[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +47,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   const [fillMemo, setFillMemo] = useState('')
   const [fillSaving, setFillSaving] = useState(false)
   const [deletingFillId, setDeletingFillId] = useState<string | null>(null)
+  const canWrite = session?.canWrite ?? false
 
   const updateEditData = (patch: Partial<TradingJournal>) => {
     setEditData((prev) => ({ ...prev, ...patch }))
@@ -86,6 +90,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   }, [params])
 
   const startEdit = () => {
+    if (!canWrite) return
     if (journal) {
       setEditData({
         company_name: journal.company_name,
@@ -108,6 +113,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleSave = async () => {
+    if (!canWrite) return
     if (!journal) return
     setSaving(true)
     try {
@@ -127,6 +133,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleDelete = async () => {
+    if (!canWrite) return
     if (!journal) return
     if (!confirm('정말 삭제하시겠습니까?')) return
     try {
@@ -143,6 +150,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleAddFill = async () => {
+    if (!canWrite) return
     if (!journal || !fillMode) return
     const price = Number(fillPrice)
     const quantity = Number(fillQuantity)
@@ -185,6 +193,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleDeleteFill = async (fillId: string) => {
+    if (!canWrite) return
     if (!journal) return
     if (!confirm('이 체결 내역을 삭제하시겠습니까?')) return
 
@@ -238,6 +247,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   const isProfit = realizedPnl >= 0
   const totalBoughtLabel = formatQuantity(rollup.totalBoughtQuantity)
   const totalSoldLabel = formatQuantity(rollup.totalSoldQuantity)
+  const ownerLabel = getOwnerLabel(journal.owner_key)
 
   return (
     <div className="min-h-screen bg-background">
@@ -251,7 +261,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
             </Button>
           </Link>
           <div className="flex gap-2">
-            {isEditing ? (
+            {isEditing && canWrite ? (
               <>
                 <Button variant="ghost" size="sm" onClick={cancelEdit} className="gap-2">
                   <X className="w-4 h-4" />
@@ -262,7 +272,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                   {saving ? '저장 중...' : '저장'}
                 </Button>
               </>
-            ) : (
+            ) : canWrite ? (
               <>
                 <Button variant="outline" size="sm" onClick={startEdit} className="gap-2">
                   <Pencil className="w-4 h-4" />
@@ -273,6 +283,10 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                   삭제
                 </Button>
               </>
+            ) : (
+              <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                마스터 계정은 조회만 가능합니다.
+              </div>
             )}
           </div>
         </div>
@@ -296,6 +310,10 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                   ) : (
                     <p className="mt-1 text-lg font-semibold text-foreground">{journal.company_name}</p>
                   )}
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">소유자</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">{ownerLabel}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">티커</p>
@@ -436,28 +454,30 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                     1차 매수, 추매, 부분매도 내역을 순서대로 기록합니다.
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={fillMode === 'buy' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFillMode(fillMode === 'buy' ? null : 'buy')}
-                    className="gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    추매 추가
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={fillMode === 'sell' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFillMode(fillMode === 'sell' ? null : 'sell')}
-                    className="gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    매도 추가
-                  </Button>
-                </div>
+                {canWrite ? (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={fillMode === 'buy' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFillMode(fillMode === 'buy' ? null : 'buy')}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      추매 추가
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={fillMode === 'sell' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFillMode(fillMode === 'sell' ? null : 'sell')}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      매도 추가
+                    </Button>
+                  </div>
+                ) : null}
               </div>
 
               {fillMode && (
@@ -557,15 +577,17 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                             <p className="text-sm text-muted-foreground">{fill.memo}</p>
                           )}
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteFill(fill.id)}
-                          disabled={deletingFillId === fill.id}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {canWrite ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteFill(fill.id)}
+                            disabled={deletingFillId === fill.id}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   ))

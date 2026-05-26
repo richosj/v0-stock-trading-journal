@@ -3,6 +3,7 @@ import type { TradingJournal } from './supabase'
 export const dummyJournals: TradingJournal[] = [
   {
     id: '1',
+    owner_key: 'owner',
     ticker: 'NVDA',
     company_name: '엔비디아',
     trade_type: 'buy',
@@ -26,6 +27,7 @@ export const dummyJournals: TradingJournal[] = [
   },
   {
     id: '2',
+    owner_key: 'owner',
     ticker: 'TSLA',
     company_name: '테슬라',
     trade_type: 'buy',
@@ -49,6 +51,7 @@ export const dummyJournals: TradingJournal[] = [
   },
   {
     id: '3',
+    owner_key: 'owner',
     ticker: 'AAPL',
     company_name: '애플',
     trade_type: 'buy',
@@ -72,6 +75,7 @@ export const dummyJournals: TradingJournal[] = [
   },
   {
     id: '4',
+    owner_key: 'owner',
     ticker: 'SAMSUNG',
     company_name: '삼성전자',
     trade_type: 'buy',
@@ -95,6 +99,7 @@ export const dummyJournals: TradingJournal[] = [
   },
   {
     id: '5',
+    owner_key: 'owner',
     ticker: 'GOOGL',
     company_name: '알파벳(구글)',
     trade_type: 'sell',

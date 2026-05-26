@@ -1,17 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = 'https://nzzaspeqnardonydimzn.supabase.co'
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56emFzcGVxbmFyZG9ueWRpbXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNzI5NjYsImV4cCI6MjA5Mzc0ODk2Nn0.h0VjwKbLYAOSxRUmpKIwX6Lg8q6SvuaYX2jnCW7tV1k'
-
-export const supabase = createClient(supabaseUrl, supabaseKey)
-
-export function getSupabase() {
-  return supabase
-}
+import type { OwnerKey } from './auth/shared'
 
 export type TradingJournalFill = {
   id: string
   journal_id: string
+  owner_key: OwnerKey
   fill_type: 'buy' | 'sell'
   price: number
   quantity: number
@@ -24,11 +16,12 @@ export type TradingJournalFill = {
 
 export type NewTradingJournalFill = Omit<
   TradingJournalFill,
-  'id' | 'created_at' | 'updated_at'
+  'id' | 'created_at' | 'updated_at' | 'owner_key'
 >
 
 export type TradingJournal = {
   id: string
+  owner_key: OwnerKey
   ticker: string
   company_name: string
   trade_type: 'buy' | 'sell'
@@ -54,5 +47,5 @@ export type TradingJournal = {
 
 export type NewTradingJournal = Omit<
   TradingJournal,
-  'id' | 'created_at' | 'updated_at' | 'fills'
+  'id' | 'created_at' | 'updated_at' | 'fills' | 'owner_key'
 >

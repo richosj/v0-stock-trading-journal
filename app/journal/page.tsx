@@ -5,11 +5,13 @@ import { JournalTable } from '@/components/trading/journal-table'
 import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
 import { fetchAllJournals } from '@/lib/trading-service'
-import { TradingJournal } from '@/lib/supabase'
+import type { TradingJournal } from '@/lib/supabase'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
+import { useAuth } from '@/components/auth-provider'
 
 export default function JournalPage() {
+  const { session } = useAuth()
   const [journals, setJournals] = useState<TradingJournal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -63,14 +65,16 @@ export default function JournalPage() {
               {journals.length}개의 매매 기록
             </p>
           </div>
-          <Link href="/create">
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              새 일지 작성
-            </Button>
-          </Link>
+          {session?.canWrite ? (
+            <Link href="/create">
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                새 일지 작성
+              </Button>
+            </Link>
+          ) : null}
         </div>
-        <JournalTable journals={journals} />
+        <JournalTable journals={journals} canWrite={session?.canWrite ?? false} />
       </main>
     </div>
   )

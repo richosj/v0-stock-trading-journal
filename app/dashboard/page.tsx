@@ -5,13 +5,15 @@ import { OverviewCards } from '@/components/trading/overview-cards'
 import { LivePricePanel } from '@/components/trading/live-price-panel'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchAllJournals, getJournalStats } from '@/lib/trading-service'
-import { TradingJournal } from '@/lib/supabase'
+import type { TradingJournal } from '@/lib/supabase'
 import type { LiveQuote } from '@/lib/market-quotes'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
+import { useAuth } from '@/components/auth-provider'
 
 export default function DashboardPage() {
+  const { session } = useAuth()
   const [stats, setStats] = useState<any>(null)
   const [journals, setJournals] = useState<TradingJournal[]>([])
   const [quotes, setQuotes] = useState<LiveQuote[]>([])
@@ -126,12 +128,18 @@ export default function DashboardPage() {
               뇌동매매 없이, 원칙에 따른 매매를 기록하고 복기하세요.
             </p>
           </div>
-          <Link href="/create">
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              새 일지 작성
-            </Button>
-          </Link>
+          {session?.canWrite ? (
+            <Link href="/create">
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                새 일지 작성
+              </Button>
+            </Link>
+          ) : (
+            <div className="rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground">
+              마스터 계정은 조회만 가능합니다.
+            </div>
+          )}
         </div>
 
         {/* Overview Cards */}

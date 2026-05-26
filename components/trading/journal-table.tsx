@@ -12,14 +12,16 @@ import {
   formatSignedCurrency,
   formatSignedPercent,
 } from "@/lib/trading-calculations";
+import { getOwnerLabel } from "@/lib/auth/shared";
 
 interface JournalTableProps {
   journals: TradingJournal[];
+  canWrite: boolean;
 }
 
 type FilterType = "전체" | "open" | "closed";
 
-export function JournalTable({ journals: initialJournals }: JournalTableProps) {
+export function JournalTable({ journals: initialJournals, canWrite }: JournalTableProps) {
   const [journals, setJournals] = useState(initialJournals);
   const [filter, setFilter] = useState<FilterType>("전체");
   const [search, setSearch] = useState("");
@@ -193,6 +195,9 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
                             <p className="text-xs font-mono text-muted-foreground mt-0.5">
                               {journal.ticker}
                             </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {getOwnerLabel(journal.owner_key)}
+                            </p>
                           </div>
                         </Link>
                       </td>
@@ -247,18 +252,20 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
                             href={`/journal/${journal.id}`}
                             onClick={(e) => e.stopPropagation()}
                             className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                            title="수정"
+                            title={canWrite ? "수정" : "상세 보기"}
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </Link>
-                          <button
-                            onClick={(e) => handleDelete(e, journal.id)}
-                            disabled={deletingId === journal.id}
-                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-loss hover:bg-loss/10 transition-colors disabled:opacity-40"
-                            title="삭제"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {canWrite ? (
+                            <button
+                              onClick={(e) => handleDelete(e, journal.id)}
+                              disabled={deletingId === journal.id}
+                              className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-loss hover:bg-loss/10 transition-colors disabled:opacity-40"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

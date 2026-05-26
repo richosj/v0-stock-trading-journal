@@ -1,5 +1,13 @@
-import { getSupabase, type TradingJournal, type NewTradingJournal } from './supabase'
 import {
+  getSupabase,
+  type TradingJournal,
+  type NewTradingJournal,
+  type TradingJournalFill,
+  type NewTradingJournalFill,
+} from './supabase'
+import {
+  calculateAverageCostRollup,
+  buildJournalSummaryFromFills,
   buildJournalPayload,
   buildJournalUpdatePayload,
   normalizeJournal,
@@ -52,7 +60,40 @@ export async function createJournal(
     return null
   }
 
-  return data ? normalizeJournal(data) : null
+  if (!data) {
+    return null
+  }
+
+  const fills: NewTradingJournalFill[] = [
+    {
+      journal_id: data.id,
+      fill_type: 'buy',
+      price: journal.entry_price,
+      quantity: journal.quantity,
+      fill_date: journal.trade_date,
+      memo: '초기 매수',
+      sort_order: 0,
+    },
+  ]
+
+  if (journal.exit_price != null && journal.exit_price > 0) {
+    fills.push({
+      journal_id: data.id,
+      fill_type: 'sell',
+      price: journal.exit_price,
+      quantity: journal.quantity,
+      fill_date: journal.exit_date || journal.trade_date,
+      memo: '초기 매도',
+      sort_order: 1,
+    })
+  }
+
+  const { error: fillError } = await supabase.from('trading_journal_fills').insert(fills)
+  if (fillError) {
+    console.error('Error creating journal fills:', fillError)
+  }
+
+  return syncJournalSummary(data.id)
 }
 
 export async function updateJournal(
@@ -102,6 +143,107 @@ export async function deleteJournal(id: string): Promise<boolean> {
   return true
 }
 
+export async function fetchJournalFills(journalId: string): Promise<TradingJournalFill[]> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('trading_journal_fills')
+    .select('*')
+    .eq('journal_id', journalId)
+    .order('fill_date', { ascending: true })
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Error fetching journal fills:', error)
+    return []
+  }
+
+  return data || []
+}
+
+export async function createJournalFill(
+  fill: NewTradingJournalFill
+): Promise<TradingJournal | null> {
+  const supabase = getSupabase()
+  const { error } = await supabase.from('trading_journal_fills').insert([
+    {
+      ...fill,
+      memo: fill.memo?.trim() || null,
+    },
+  ])
+
+  if (error) {
+    console.error('Error creating journal fill:', error)
+    return null
+  }
+
+  return syncJournalSummary(fill.journal_id)
+}
+
+export async function deleteJournalFill(
+  journalId: string,
+  fillId: string
+): Promise<TradingJournal | null> {
+  const supabase = getSupabase()
+  const { error } = await supabase
+    .from('trading_journal_fills')
+    .delete()
+    .eq('id', fillId)
+
+  if (error) {
+    console.error('Error deleting journal fill:', error)
+    return null
+  }
+
+  return syncJournalSummary(journalId)
+}
+
+export async function syncJournalSummary(journalId: string): Promise<TradingJournal | null> {
+  const supabase = getSupabase()
+  const [journal, fills] = await Promise.all([
+    fetchJournalById(journalId),
+    fetchJournalFills(journalId),
+  ])
+
+  if (!journal) {
+    return null
+  }
+
+  if (fills.length === 0) {
+    return journal
+  }
+
+  const payload = buildJournalSummaryFromFills(
+    {
+      ticker: journal.ticker,
+      company_name: journal.company_name,
+      target_price: journal.target_price,
+      stop_loss: journal.stop_loss,
+      trade_date: journal.trade_date,
+      reason: journal.reason,
+      strategy: journal.strategy,
+      is_principle: journal.is_principle,
+      scenario_notes: journal.scenario_notes,
+      principle_notes: journal.principle_notes,
+    },
+    fills
+  )
+
+  const { data, error } = await supabase
+    .from('trading_journals')
+    .update(payload)
+    .eq('id', journalId)
+    .select('*')
+    .single()
+
+  if (error) {
+    console.error('Error syncing journal summary:', error)
+    return null
+  }
+
+  return data ? normalizeJournal(data) : null
+}
+
 export async function getJournalStats() {
   try {
     const journals = await fetchAllJournals()
@@ -116,18 +258,29 @@ export async function getJournalStats() {
       }
     }
 
-    const closedJournals = journals.filter(
-      (j) => j.status === 'closed' && j.pnl != null && j.pnl_percent != null
+    const fillRollups = await Promise.all(
+      journals.map(async (journal) => ({
+        journal,
+        rollup: calculateAverageCostRollup(await fetchJournalFills(journal.id)),
+      }))
     )
-    const wins = closedJournals.filter((j) => (j.pnl || 0) > 0).length
-    const winRate = closedJournals.length > 0 ? (wins / closedJournals.length) * 100 : 0
+
+    const closedJournals = fillRollups.filter(
+      ({ rollup }) => rollup.openQuantity === 0 && rollup.totalBoughtQuantity > 0
+    )
+    const wins = closedJournals.filter(({ rollup }) => rollup.realizedPnl > 0).length
+    const winRate =
+      closedJournals.length > 0 ? (wins / closedJournals.length) * 100 : 0
     const principleJournals = journals.filter((j) => j.is_principle).length
     const principleRate =
       journals.length > 0 ? (principleJournals / journals.length) * 100 : 0
 
-    const totalPnL = closedJournals.reduce((sum, j) => sum + (j.pnl || 0), 0)
-    const totalClosedCost = closedJournals.reduce(
-      (sum, journal) => sum + journal.entry_price * journal.quantity,
+    const totalPnL = fillRollups.reduce(
+      (sum, { rollup }) => sum + rollup.realizedPnl,
+      0
+    )
+    const totalClosedCost = fillRollups.reduce(
+      (sum, { rollup }) => sum + rollup.totalBoughtCost,
       0
     )
 
@@ -136,7 +289,7 @@ export async function getJournalStats() {
       totalPnLPercent: totalClosedCost > 0 ? (totalPnL / totalClosedCost) * 100 : 0,
       winRate,
       principleRate,
-      openPositions: journals.filter((j) => j.status === 'open').length,
+      openPositions: fillRollups.filter(({ rollup }) => rollup.openQuantity > 0).length,
     }
   } catch (error) {
     console.error('Error getting journal stats:', error)

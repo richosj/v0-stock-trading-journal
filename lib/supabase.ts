@@ -9,6 +9,24 @@ export function getSupabase() {
   return supabase
 }
 
+export type TradingJournalFill = {
+  id: string
+  journal_id: string
+  fill_type: 'buy' | 'sell'
+  price: number
+  quantity: number
+  fill_date: string
+  memo: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type NewTradingJournalFill = Omit<
+  TradingJournalFill,
+  'id' | 'created_at' | 'updated_at'
+>
+
 export type TradingJournal = {
   id: string
   ticker: string
@@ -31,6 +49,10 @@ export type TradingJournal = {
   principle_notes: string | null
   created_at: string
   updated_at: string
+  fills?: TradingJournalFill[]
 }
 
-export type NewTradingJournal = Omit<TradingJournal, 'id' | 'created_at' | 'updated_at'>
+export type NewTradingJournal = Omit<
+  TradingJournal,
+  'id' | 'created_at' | 'updated_at' | 'fills'
+>

@@ -1,4 +1,9 @@
-import type { NewTradingJournal, TradingJournal } from './supabase'
+import type {
+  NewTradingJournal,
+  NewTradingJournalFill,
+  TradingJournal,
+  TradingJournalFill,
+} from './supabase'
 
 const integerFormatter = new Intl.NumberFormat('ko-KR')
 const decimalFormatter = new Intl.NumberFormat('ko-KR', {
@@ -21,6 +26,20 @@ function normalizeStrategy(strategy: string[] | null | undefined) {
     .filter(Boolean)
 
   return cleaned.length > 0 ? cleaned : ['일반']
+}
+
+function sortFills<T extends Pick<TradingJournalFill, 'fill_date' | 'sort_order' | 'created_at'>>(
+  fills: T[]
+) {
+  return [...fills].sort((left, right) => {
+    const dateDiff = new Date(left.fill_date).getTime() - new Date(right.fill_date).getTime()
+    if (dateDiff !== 0) return dateDiff
+
+    const orderDiff = left.sort_order - right.sort_order
+    if (orderDiff !== 0) return orderDiff
+
+    return new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+  })
 }
 
 function normalizeBaseJournal(journal: NewTradingJournal): NewTradingJournal {
@@ -58,6 +77,116 @@ export function calculateJournalMetrics(
   return {
     pnl,
     pnl_percent: pnlPercent,
+  }
+}
+
+export function calculateAverageCostRollup(
+  fills: Pick<TradingJournalFill, 'fill_type' | 'price' | 'quantity' | 'fill_date' | 'sort_order' | 'created_at'>[]
+) {
+  let openQuantity = 0
+  let openCost = 0
+  let totalBoughtQuantity = 0
+  let totalBoughtCost = 0
+  let totalSoldQuantity = 0
+  let realizedPnl = 0
+  let lastSellPrice: number | null = null
+  let lastSellDate: string | null = null
+
+  for (const fill of sortFills(fills)) {
+    if (fill.fill_type === 'buy') {
+      openQuantity += fill.quantity
+      openCost += fill.price * fill.quantity
+      totalBoughtQuantity += fill.quantity
+      totalBoughtCost += fill.price * fill.quantity
+      continue
+    }
+
+    if (openQuantity <= 0) {
+      continue
+    }
+
+    const sellQuantity = Math.min(fill.quantity, openQuantity)
+    const averageCost = openCost / openQuantity
+
+    realizedPnl += (fill.price - averageCost) * sellQuantity
+    openQuantity -= sellQuantity
+    openCost -= averageCost * sellQuantity
+    totalSoldQuantity += sellQuantity
+    lastSellPrice = fill.price
+    lastSellDate = fill.fill_date
+
+    if (openQuantity === 0) {
+      openCost = 0
+    }
+  }
+
+  const averageEntryPrice = openQuantity > 0 ? openCost / openQuantity : 0
+  const realizedPnlPercent =
+    totalBoughtCost > 0 ? (realizedPnl / totalBoughtCost) * 100 : 0
+
+  return {
+    totalBoughtQuantity,
+    totalBoughtCost,
+    totalSoldQuantity,
+    openQuantity,
+    openCost,
+    averageEntryPrice: roundToTwo(averageEntryPrice),
+    realizedPnl: roundToTwo(realizedPnl),
+    realizedPnlPercent: roundToTwo(realizedPnlPercent),
+    lastSellPrice: lastSellPrice != null ? roundToTwo(lastSellPrice) : null,
+    lastSellDate,
+  }
+}
+
+export function buildJournalSummaryFromFills(
+  journal: Pick<
+    NewTradingJournal,
+    'ticker' | 'company_name' | 'target_price' | 'stop_loss' | 'trade_date' | 'reason' | 'strategy' | 'is_principle' | 'scenario_notes' | 'principle_notes'
+  >,
+  fills: TradingJournalFill[] | NewTradingJournalFill[]
+): NewTradingJournal {
+  const normalized = normalizeBaseJournal({
+    ...journal,
+    trade_type: 'buy',
+    entry_price: 0,
+    quantity: 0,
+    status: 'open',
+    exit_price: null,
+    exit_date: null,
+    pnl: null,
+    pnl_percent: null,
+  })
+  const normalizedFills: Pick<
+    TradingJournalFill,
+    'fill_type' | 'price' | 'quantity' | 'fill_date' | 'sort_order' | 'created_at'
+  >[] = fills.map((fill) => ({
+    fill_type: fill.fill_type,
+    price: fill.price,
+    quantity: fill.quantity,
+    fill_date: fill.fill_date,
+    sort_order: fill.sort_order,
+    created_at: 'created_at' in fill ? fill.created_at : new Date().toISOString(),
+  }))
+
+  const rollup = calculateAverageCostRollup(normalizedFills)
+
+  const firstBuyFill = sortFills(
+    normalizedFills.filter((fill) => fill.fill_type === 'buy')
+  )[0]
+
+  const isClosed = rollup.openQuantity === 0 && rollup.totalBoughtQuantity > 0
+
+  return {
+    ...normalized,
+    trade_type: 'buy',
+    entry_price: rollup.averageEntryPrice || firstBuyFill?.price || 0,
+    quantity: rollup.openQuantity,
+    trade_date: firstBuyFill?.fill_date || normalized.trade_date,
+    status: isClosed ? 'closed' : 'open',
+    exit_price: isClosed ? rollup.lastSellPrice : null,
+    exit_date: isClosed ? rollup.lastSellDate : null,
+    pnl: rollup.totalSoldQuantity > 0 ? rollup.realizedPnl : null,
+    pnl_percent: rollup.totalSoldQuantity > 0 ? rollup.realizedPnlPercent : null,
   }
 }
 
@@ -124,23 +253,19 @@ export function buildJournalUpdatePayload(
 }
 
 export function normalizeJournal(journal: TradingJournal): TradingJournal {
-  const hasSellPrice = journal.exit_price != null && journal.exit_price > 0
-
-  if (!hasSellPrice) {
+  if (journal.quantity > 0 || journal.exit_price == null) {
     return {
       ...journal,
       trade_type: 'buy',
       strategy: normalizeStrategy(journal.strategy),
       reason: journal.reason ?? '',
       status: 'open',
-      exit_price: null,
-      exit_date: null,
-      pnl: null,
-      pnl_percent: null,
+      exit_price: journal.quantity > 0 ? null : journal.exit_price,
+      exit_date: journal.quantity > 0 ? null : journal.exit_date,
+      pnl: journal.quantity > 0 ? journal.pnl : journal.pnl,
+      pnl_percent: journal.quantity > 0 ? journal.pnl_percent : journal.pnl_percent,
     }
   }
-
-  const metrics = calculateJournalMetrics(journal)
 
   return {
     ...journal,
@@ -148,8 +273,6 @@ export function normalizeJournal(journal: TradingJournal): TradingJournal {
     status: 'closed',
     strategy: normalizeStrategy(journal.strategy),
     reason: journal.reason ?? '',
-    pnl: metrics?.pnl ?? null,
-    pnl_percent: metrics?.pnl_percent ?? null,
   }
 }
 

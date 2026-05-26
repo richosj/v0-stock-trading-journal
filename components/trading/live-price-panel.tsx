@@ -41,6 +41,33 @@ export function LivePricePanel({
   onRefresh,
 }: LivePricePanelProps) {
   const quoteMap = new Map(quotes.map((quote) => [quote.journalId, quote]));
+  const livePositions = positions.filter((position) => {
+    const quote = quoteMap.get(position.id);
+    return quote?.regularMarketPrice != null;
+  });
+  const totalCostBasis = livePositions.reduce(
+    (sum, position) => sum + position.entry_price * position.quantity,
+    0
+  );
+  const totalMarketValue = livePositions.reduce((sum, position) => {
+    const quote = quoteMap.get(position.id);
+    return sum + (quote?.regularMarketPrice ?? 0) * position.quantity;
+  }, 0);
+  const totalUnrealizedPnL = totalMarketValue - totalCostBasis;
+  const totalUnrealizedPercent =
+    totalCostBasis > 0 ? (totalUnrealizedPnL / totalCostBasis) * 100 : 0;
+  const totalDayChange = livePositions.reduce((sum, position) => {
+    const quote = quoteMap.get(position.id);
+    return sum + (quote?.change ?? 0) * position.quantity;
+  }, 0);
+  const totalPreviousValue = livePositions.reduce((sum, position) => {
+    const quote = quoteMap.get(position.id);
+    return sum + (quote?.previousClose ?? 0) * position.quantity;
+  }, 0);
+  const totalDayChangePercent =
+    totalPreviousValue > 0 ? (totalDayChange / totalPreviousValue) * 100 : 0;
+  const isPortfolioUp = totalUnrealizedPnL >= 0;
+  const isDayUp = totalDayChange >= 0;
 
   return (
     <section aria-label="실시간 보유 종목" className="space-y-4">
@@ -67,142 +94,227 @@ export function LivePricePanel({
           현재 보유 중인 종목이 없습니다.
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {positions.map((position) => {
-            const quote = quoteMap.get(position.id);
-            const hasLivePrice = quote?.regularMarketPrice != null;
-            const marketValue = hasLivePrice
-              ? quote.regularMarketPrice! * position.quantity
-              : null;
-            const unrealizedPnL = hasLivePrice
-              ? (quote.regularMarketPrice! - position.entry_price) * position.quantity
-              : null;
-            const unrealizedPercent =
-              unrealizedPnL != null && position.entry_price > 0
-                ? (unrealizedPnL / (position.entry_price * position.quantity)) * 100
-                : null;
-            const isUp = (quote?.change ?? 0) >= 0;
-            const isGain = (unrealizedPnL ?? 0) >= 0;
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-border bg-card p-5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                실시간 반영
+              </p>
+              <p className="mt-2 text-2xl font-bold text-foreground">
+                {livePositions.length}
+                <span className="ml-1 text-base font-medium text-muted-foreground">
+                  / {positions.length}
+                </span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                조회 가능한 보유 종목 수
+              </p>
+            </div>
 
-            return (
-              <div
-                key={position.id}
-                className="rounded-xl border border-border bg-card p-5 space-y-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">
-                      {position.company_name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      티커: {quote?.resolvedSymbol ?? (position.ticker || "미입력")}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
-                      hasLivePrice
-                        ? "bg-primary/10 text-primary"
-                        : "bg-secondary text-muted-foreground"
-                    )}
-                  >
-                    {hasLivePrice ? "실시간 반영" : "조회 불가"}
-                  </span>
-                </div>
+            <div className="rounded-xl border border-border bg-card p-5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                합산 평가금액
+              </p>
+              <p className="mt-2 text-2xl font-bold text-foreground">
+                {livePositions.length > 0 ? formatCurrency(totalMarketValue) : "-"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                실시간 반영 종목 기준
+              </p>
+            </div>
 
-                {hasLivePrice ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">현재가</p>
-                        <p className="mt-1 text-2xl font-bold text-foreground">
-                          {formatQuoteCurrency(
-                            quote!.regularMarketPrice!,
-                            quote!.currency
-                          )}
-                        </p>
-                        <p
-                          className={cn(
-                            "mt-1 inline-flex items-center gap-1 text-sm font-medium",
-                            isUp ? "text-profit" : "text-loss"
-                          )}
-                        >
-                          {isUp ? (
-                            <TrendingUp className="w-4 h-4" />
-                          ) : (
-                            <TrendingDown className="w-4 h-4" />
-                          )}
-                          {formatSignedQuoteCurrency(
-                            quote!.change ?? 0,
-                            quote!.currency
-                          )} (
-                          {formatSignedPercent(quote!.changePercent ?? 0, 2)})
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-secondary/40 p-4">
-                        <p className="text-sm text-muted-foreground">진입 정보</p>
-                        <p className="mt-2 text-sm text-foreground">
-                          진입가: {formatCurrency(position.entry_price)}
-                        </p>
-                        <p className="mt-1 text-sm text-foreground">
-                          수량: {formatQuantity(position.quantity)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                        <p className="text-sm text-muted-foreground">평가금액</p>
-                        <p className="mt-2 text-lg font-semibold text-foreground">
-                          {marketValue != null ? formatCurrency(marketValue) : "-"}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                        <p className="text-sm text-muted-foreground">평가손익</p>
-                        <p
-                          className={cn(
-                            "mt-2 text-lg font-semibold",
-                            isGain ? "text-profit" : "text-loss"
-                          )}
-                        >
-                          {unrealizedPnL != null
-                            ? formatSignedCurrency(unrealizedPnL)
-                            : "-"}
-                        </p>
-                        <p
-                          className={cn(
-                            "mt-1 text-sm font-medium",
-                            isGain ? "text-profit" : "text-loss"
-                          )}
-                        >
-                          {unrealizedPercent != null
-                            ? formatSignedPercent(unrealizedPercent, 2)
-                            : "-"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {quote?.marketTime && (
-                      <p className="text-xs text-muted-foreground">
-                        업데이트:{" "}
-                        {new Date(quote.marketTime * 1000).toLocaleString("ko-KR")}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2 mb-2">
-                      <WifiOff className="w-4 h-4" />
-                      <span className="font-medium">실시간 시세를 표시할 수 없습니다.</span>
-                    </div>
-                    <p>{quote?.error ?? "유효한 티커를 확인해주세요."}</p>
-                    <p className="mt-2">예: 미국 주식은 `AAPL`, 한국 주식은 `005930`처럼 입력하면 됩니다.</p>
-                  </div>
+            <div className="rounded-xl border border-border bg-card p-5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                합산 평가손익
+              </p>
+              <p
+                className={cn(
+                  "mt-2 text-2xl font-bold",
+                  isPortfolioUp ? "text-profit" : "text-loss"
                 )}
-              </div>
-            );
-          })}
-        </div>
+              >
+                {livePositions.length > 0
+                  ? formatSignedCurrency(totalUnrealizedPnL)
+                  : "-"}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-xs font-medium",
+                  isPortfolioUp ? "text-profit" : "text-loss"
+                )}
+              >
+                {livePositions.length > 0
+                  ? formatSignedPercent(totalUnrealizedPercent, 2)
+                  : "-"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                당일 변동 합계
+              </p>
+              <p
+                className={cn(
+                  "mt-2 text-2xl font-bold",
+                  isDayUp ? "text-profit" : "text-loss"
+                )}
+              >
+                {livePositions.length > 0
+                  ? formatSignedCurrency(totalDayChange)
+                  : "-"}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-xs font-medium",
+                  isDayUp ? "text-profit" : "text-loss"
+                )}
+              >
+                {livePositions.length > 0
+                  ? formatSignedPercent(totalDayChangePercent, 2)
+                  : "-"}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {positions.map((position) => {
+              const quote = quoteMap.get(position.id);
+              const hasLivePrice = quote?.regularMarketPrice != null;
+              const marketValue = hasLivePrice
+                ? quote.regularMarketPrice! * position.quantity
+                : null;
+              const unrealizedPnL = hasLivePrice
+                ? (quote.regularMarketPrice! - position.entry_price) * position.quantity
+                : null;
+              const unrealizedPercent =
+                unrealizedPnL != null && position.entry_price > 0
+                  ? (unrealizedPnL / (position.entry_price * position.quantity)) * 100
+                  : null;
+              const isUp = (quote?.change ?? 0) >= 0;
+              const isGain = (unrealizedPnL ?? 0) >= 0;
+
+              return (
+                <div
+                  key={position.id}
+                  className="rounded-xl border border-border bg-card p-5 space-y-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">
+                        {position.company_name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        티커: {quote?.resolvedSymbol ?? (position.ticker || "미입력")}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+                        hasLivePrice
+                          ? "bg-primary/10 text-primary"
+                          : "bg-secondary text-muted-foreground"
+                      )}
+                    >
+                      {hasLivePrice ? "실시간 반영" : "조회 불가"}
+                    </span>
+                  </div>
+
+                  {hasLivePrice ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">현재가</p>
+                          <p className="mt-1 text-2xl font-bold text-foreground">
+                            {formatQuoteCurrency(
+                              quote!.regularMarketPrice!,
+                              quote!.currency
+                            )}
+                          </p>
+                          <p
+                            className={cn(
+                              "mt-1 inline-flex items-center gap-1 text-sm font-medium",
+                              isUp ? "text-profit" : "text-loss"
+                            )}
+                          >
+                            {isUp ? (
+                              <TrendingUp className="w-4 h-4" />
+                            ) : (
+                              <TrendingDown className="w-4 h-4" />
+                            )}
+                            {formatSignedQuoteCurrency(
+                              quote!.change ?? 0,
+                              quote!.currency
+                            )} (
+                            {formatSignedPercent(quote!.changePercent ?? 0, 2)})
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-secondary/40 p-4">
+                          <p className="text-sm text-muted-foreground">진입 정보</p>
+                          <p className="mt-2 text-sm text-foreground">
+                            진입가: {formatCurrency(position.entry_price)}
+                          </p>
+                          <p className="mt-1 text-sm text-foreground">
+                            수량: {formatQuantity(position.quantity)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-border bg-secondary/30 p-4">
+                          <p className="text-sm text-muted-foreground">평가금액</p>
+                          <p className="mt-2 text-lg font-semibold text-foreground">
+                            {marketValue != null ? formatCurrency(marketValue) : "-"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-secondary/30 p-4">
+                          <p className="text-sm text-muted-foreground">평가손익</p>
+                          <p
+                            className={cn(
+                              "mt-2 text-lg font-semibold",
+                              isGain ? "text-profit" : "text-loss"
+                            )}
+                          >
+                            {unrealizedPnL != null
+                              ? formatSignedCurrency(unrealizedPnL)
+                              : "-"}
+                          </p>
+                          <p
+                            className={cn(
+                              "mt-1 text-sm font-medium",
+                              isGain ? "text-profit" : "text-loss"
+                            )}
+                          >
+                            {unrealizedPercent != null
+                              ? formatSignedPercent(unrealizedPercent, 2)
+                              : "-"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {quote?.marketTime && (
+                        <p className="text-xs text-muted-foreground">
+                          업데이트:{" "}
+                          {new Date(quote.marketTime * 1000).toLocaleString("ko-KR")}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2 mb-2">
+                        <WifiOff className="w-4 h-4" />
+                        <span className="font-medium">실시간 시세를 표시할 수 없습니다.</span>
+                      </div>
+                      <p>{quote?.error ?? "유효한 티커를 확인해주세요."}</p>
+                      <p className="mt-2">
+                        예: 미국 주식은 `AAPL`, 한국 주식은 `005930`처럼 입력하면 됩니다.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </section>
   );

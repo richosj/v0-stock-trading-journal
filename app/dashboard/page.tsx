@@ -119,24 +119,24 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8 space-y-8">
+      <main className="container mx-auto px-4 py-6 space-y-6 sm:py-8 sm:space-y-8">
         {/* Title */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">대시보드</h1>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">대시보드</h1>
             <p className="text-sm text-muted-foreground mt-1">
               뇌동매매 없이, 원칙에 따른 매매를 기록하고 복기하세요.
             </p>
           </div>
           {session?.canWrite ? (
             <Link href="/create">
-              <Button className="gap-2">
+              <Button className="w-full gap-2 sm:w-auto">
                 <Plus className="w-4 h-4" />
                 새 일지 작성
               </Button>
             </Link>
           ) : (
-            <div className="rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
               마스터 계정은 조회만 가능합니다.
             </div>
           )}
@@ -158,7 +158,7 @@ export default function DashboardPage() {
         />
 
         {/* Quick Links */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Link
             href="/journal"
             className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
@@ -170,17 +170,26 @@ export default function DashboardPage() {
               모든 매매 일지를 확인하고 관리하세요.
             </p>
           </Link>
-          <Link
-            href="/create"
-            className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
-          >
-            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-              ✏️ 새 일지 작성
-            </h3>
-            <p className="text-sm text-muted-foreground mt-2">
-              오늘의 매매를 기록하세요.
-            </p>
-          </Link>
+          {session?.canWrite ? (
+            <Link
+              href="/create"
+              className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
+            >
+              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                ✏️ 새 일지 작성
+              </h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                오늘의 매매를 기록하세요.
+              </p>
+            </Link>
+          ) : (
+            <div className="p-6 rounded-xl border border-border bg-card">
+              <h3 className="font-semibold text-foreground">👀 조회 전용 모드</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                마스터 계정은 전체 기록과 포트폴리오 현황을 확인할 수 있습니다.
+              </p>
+            </div>
+          )}
         </section>
       </main>
     </div>

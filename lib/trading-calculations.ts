@@ -121,6 +121,7 @@ export function calculateAverageCostRollup(
   }
 
   const averageEntryPrice = openQuantity > 0 ? openCost / openQuantity : 0
+  const averageBuyPrice = totalBoughtQuantity > 0 ? totalBoughtCost / totalBoughtQuantity : 0
   const realizedPnlPercent =
     totalBoughtCost > 0 ? (realizedPnl / totalBoughtCost) * 100 : 0
 
@@ -130,6 +131,7 @@ export function calculateAverageCostRollup(
     totalSoldQuantity,
     openQuantity,
     openCost,
+    averageBuyPrice: roundToTwo(averageBuyPrice),
     averageEntryPrice: roundToTwo(averageEntryPrice),
     realizedPnl: roundToTwo(realizedPnl),
     realizedPnlPercent: roundToTwo(realizedPnlPercent),
@@ -179,7 +181,7 @@ export function buildJournalSummaryFromFills(
   return {
     ...normalized,
     trade_type: 'buy',
-    entry_price: rollup.averageEntryPrice || firstBuyFill?.price || 0,
+    entry_price: rollup.averageBuyPrice || firstBuyFill?.price || 0,
     quantity: rollup.openQuantity,
     trade_date: firstBuyFill?.fill_date || normalized.trade_date,
     status: isClosed ? 'closed' : 'open',

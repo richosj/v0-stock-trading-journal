@@ -57,17 +57,17 @@ export default function JournalPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">매매 일지 목록</h1>
+      <main className="container mx-auto px-4 py-6 sm:py-8">
+        <div className="mb-6 flex flex-col gap-4 sm:mb-8 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">매매 일지 목록</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {journals.length}개의 매매 기록
             </p>
           </div>
           {session?.canWrite ? (
             <Link href="/create">
-              <Button className="gap-2">
+              <Button className="w-full gap-2 sm:w-auto">
                 <Plus className="w-4 h-4" />
                 새 일지 작성
               </Button>

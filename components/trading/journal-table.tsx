@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import {
   formatCurrency,
+  formatQuantity,
   formatSignedCurrency,
   formatSignedPercent,
 } from "@/lib/trading-calculations";
@@ -84,16 +85,16 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
     <>
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         {/* Table header controls */}
-        <div className="px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border">
+        <div className="px-4 py-4 sm:px-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 border-b border-border">
           <div className="flex items-center gap-3">
             <h2 className="font-semibold text-foreground">매매 일지</h2>
             <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
               {journals.length}건
             </span>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
             {/* Search */}
-            <div className="relative flex-1 sm:w-48">
+            <div className="relative flex-1 sm:min-w-[220px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input
                 type="text"
@@ -104,7 +105,7 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
               />
             </div>
             {/* Filter */}
-            <div className="flex rounded-lg border border-border overflow-hidden">
+            <div className="flex rounded-lg border border-border overflow-hidden self-start">
               {(["전체", "open", "closed"] as FilterType[]).map((f) => {
                 const label = f === "전체" ? "전체" : f === "open" ? "매도 전" : "매도 완료";
                 return (
@@ -126,156 +127,264 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground">
-                  종목명
-                </th>
-                <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
-                  매도가
-                </th>
-                <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
-                  <button
-                    onClick={() => handleSort("trade_date")}
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+        {filtered.length === 0 ? (
+          <div className="px-4 py-12 text-center text-muted-foreground text-sm sm:px-6">
+            <Filter className="w-5 h-5 mx-auto mb-2 opacity-40" />
+            검색 결과가 없습니다
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-3 p-4 sm:hidden">
+              {filtered.map((journal) => {
+                const hasRealizedResult =
+                  journal.exit_price != null &&
+                  journal.pnl != null &&
+                  journal.pnl_percent != null;
+                const isProfitable = (journal.pnl_percent ?? 0) >= 0;
+
+                return (
+                  <Link
+                    key={journal.id}
+                    href={`/journal/${journal.id}`}
+                    className="rounded-xl border border-border bg-background p-4 transition-colors hover:bg-secondary/30"
                   >
-                    진입일
-                    <ArrowUpDown className="w-3 h-3" />
-                  </button>
-                </th>
-                <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
-                  <button
-                    onClick={() => handleSort("pnl_percent")}
-                    className="flex items-center gap-1 ml-auto hover:text-foreground transition-colors"
-                  >
-                    손익률
-                    <ArrowUpDown className="w-3 h-3" />
-                  </button>
-                </th>
-                <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
-                  원칙
-                </th>
-                <th className="px-3 py-3 text-xs font-medium text-muted-foreground text-right">
-                  액션
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="text-center py-12 text-muted-foreground text-sm"
-                  >
-                    <Filter className="w-5 h-5 mx-auto mb-2 opacity-40" />
-                    검색 결과가 없습니다
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((journal) => {
-                  const hasRealizedResult =
-                    journal.exit_price != null &&
-                    journal.pnl != null &&
-                    journal.pnl_percent != null;
-                  const isProfitable = (journal.pnl_percent ?? 0) >= 0;
-                  return (
-                    <tr
-                      key={journal.id}
-                      className="border-b border-border/50 hover:bg-secondary/30 transition-colors group"
-                    >
-                      <td className="px-6 py-4">
-                        <Link href={`/journal/${journal.id}`} className="block hover:opacity-80">
-                          <div>
-                            <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                              {journal.company_name}
-                            </p>
-                            <p className="text-xs font-mono text-muted-foreground mt-0.5">
-                              {journal.ticker}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {getOwnerLabel(journal.owner_key)}
-                            </p>
-                          </div>
-                        </Link>
-                      </td>
-                      <td className="px-3 py-4 text-right">
-                        <span className="font-mono text-sm text-foreground">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-foreground">
+                          {journal.company_name}
+                        </p>
+                        <p className="mt-1 text-xs font-mono text-muted-foreground">
+                          {journal.ticker || "티커 미입력"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {getOwnerLabel(journal.owner_key)}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          journal.is_principle
+                            ? "bg-profit-muted text-profit"
+                            : "bg-loss-muted text-loss"
+                        )}
+                      >
+                        {journal.is_principle ? "원칙" : "뇌동"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-secondary/40 p-3">
+                        <p className="text-[11px] text-muted-foreground">평균 매수가</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {formatCurrency(journal.entry_price)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-secondary/40 p-3">
+                        <p className="text-[11px] text-muted-foreground">수량</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {formatQuantity(journal.quantity)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-secondary/40 p-3">
+                        <p className="text-[11px] text-muted-foreground">매도가</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
                           {journal.exit_price != null ? formatCurrency(journal.exit_price) : "-"}
-                        </span>
-                      </td>
-                      {/* 진입일 */}
-                      <td className="px-3 py-4 text-xs font-mono text-muted-foreground">
-                        {new Date(journal.trade_date).toLocaleDateString("ko-KR")}
-                      </td>
-                      {/* 손익률 */}
-                      <td className="px-3 py-4 text-right">
-                        <div>
-                          <p
-                            className={cn(
-                              "font-mono font-semibold text-sm",
-                              isProfitable
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-secondary/40 p-3">
+                        <p className="text-[11px] text-muted-foreground">진입일</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {new Date(journal.trade_date).toLocaleDateString("ko-KR")}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">손익률</p>
+                        <p
+                          className={cn(
+                            "mt-1 text-sm font-semibold",
+                            hasRealizedResult
+                              ? isProfitable
                                 ? "text-profit"
                                 : "text-loss"
-                            )}
-                          >
-                            {hasRealizedResult
-                              ? formatSignedPercent(journal.pnl_percent ?? 0, 2)
-                              : "-"}
-                          </p>
-                          {hasRealizedResult && (
-                            <p className="text-xs font-mono text-muted-foreground">
-                              {formatSignedCurrency(journal.pnl ?? 0)}
-                            </p>
-                          )}
-                        </div>
-                      </td>
-                      {/* 원칙 */}
-                      <td className="px-3 py-4">
-                        <span
-                          className={cn(
-                            "px-2 py-0.5 rounded-full text-xs font-medium",
-                            journal.is_principle
-                              ? "bg-profit-muted text-profit"
-                              : "bg-loss-muted text-loss"
+                              : "text-muted-foreground"
                           )}
                         >
-                          {journal.is_principle ? "원칙매매" : "뇌동매매"}
-                        </span>
-                      </td>
-                      {/* 액션 */}
-                      <td className="px-3 py-4">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link
-                            href={`/journal/${journal.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                            title={canWrite ? "수정" : "상세 보기"}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
+                          {hasRealizedResult
+                            ? formatSignedPercent(journal.pnl_percent ?? 0, 2)
+                            : "-"}
+                        </p>
+                        {hasRealizedResult && (
+                          <p className="mt-1 text-xs font-mono text-muted-foreground">
+                            {formatSignedCurrency(journal.pnl ?? 0)}
+                          </p>
+                        )}
+                      </div>
+
+                      {canWrite ? (
+                        <button
+                          onClick={(e) => handleDelete(e, journal.id)}
+                          disabled={deletingId === journal.id}
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-loss/10 hover:text-loss disabled:opacity-40"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[860px] text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground">
+                      종목명
+                    </th>
+                    <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
+                      평균 매수가
+                    </th>
+                    <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
+                      수량
+                    </th>
+                    <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
+                      매도가
+                    </th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
+                      <button
+                        onClick={() => handleSort("trade_date")}
+                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                      >
+                        진입일
+                        <ArrowUpDown className="w-3 h-3" />
+                      </button>
+                    </th>
+                    <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
+                      <button
+                        onClick={() => handleSort("pnl_percent")}
+                        className="flex items-center gap-1 ml-auto hover:text-foreground transition-colors"
+                      >
+                        손익률
+                        <ArrowUpDown className="w-3 h-3" />
+                      </button>
+                    </th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
+                      원칙
+                    </th>
+                    <th className="px-3 py-3 text-xs font-medium text-muted-foreground text-right">
+                      액션
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((journal) => {
+                    const hasRealizedResult =
+                      journal.exit_price != null &&
+                      journal.pnl != null &&
+                      journal.pnl_percent != null;
+                    const isProfitable = (journal.pnl_percent ?? 0) >= 0;
+
+                    return (
+                      <tr
+                        key={journal.id}
+                        className="border-b border-border/50 hover:bg-secondary/30 transition-colors group"
+                      >
+                        <td className="px-6 py-4">
+                          <Link href={`/journal/${journal.id}`} className="block hover:opacity-80">
+                            <div>
+                              <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                                {journal.company_name}
+                              </p>
+                              <p className="text-xs font-mono text-muted-foreground mt-0.5">
+                                {journal.ticker}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {getOwnerLabel(journal.owner_key)}
+                              </p>
+                            </div>
                           </Link>
-                          {canWrite ? (
-                            <button
-                              onClick={(e) => handleDelete(e, journal.id)}
-                              disabled={deletingId === journal.id}
-                              className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-loss hover:bg-loss/10 transition-colors disabled:opacity-40"
-                              title="삭제"
+                        </td>
+                        <td className="px-3 py-4 text-right font-mono text-sm text-foreground">
+                          {formatCurrency(journal.entry_price)}
+                        </td>
+                        <td className="px-3 py-4 text-right font-mono text-sm text-foreground">
+                          {formatQuantity(journal.quantity)}
+                        </td>
+                        <td className="px-3 py-4 text-right">
+                          <span className="font-mono text-sm text-foreground">
+                            {journal.exit_price != null ? formatCurrency(journal.exit_price) : "-"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-4 text-xs font-mono text-muted-foreground">
+                          {new Date(journal.trade_date).toLocaleDateString("ko-KR")}
+                        </td>
+                        <td className="px-3 py-4 text-right">
+                          <div>
+                            <p
+                              className={cn(
+                                "font-mono font-semibold text-sm",
+                                isProfitable ? "text-profit" : "text-loss"
+                              )}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                              {hasRealizedResult
+                                ? formatSignedPercent(journal.pnl_percent ?? 0, 2)
+                                : "-"}
+                            </p>
+                            {hasRealizedResult && (
+                              <p className="text-xs font-mono text-muted-foreground">
+                                {formatSignedCurrency(journal.pnl ?? 0)}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-4">
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-xs font-medium",
+                              journal.is_principle
+                                ? "bg-profit-muted text-profit"
+                                : "bg-loss-muted text-loss"
+                            )}
+                          >
+                            {journal.is_principle ? "원칙매매" : "뇌동매매"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <Link
+                              href={`/journal/${journal.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                              title={canWrite ? "수정" : "상세 보기"}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Link>
+                            {canWrite ? (
+                              <button
+                                onClick={(e) => handleDelete(e, journal.id)}
+                                disabled={deletingId === journal.id}
+                                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-loss hover:bg-loss/10 transition-colors disabled:opacity-40"
+                                title="삭제"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
         </div>
-      </div>
     </>
   );
 }

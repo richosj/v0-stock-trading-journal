@@ -8,6 +8,11 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  formatPercent,
+  formatSignedCurrency,
+  formatSignedPercent,
+} from "@/lib/trading-calculations";
 
 interface OverviewCardsProps {
   stats: {
@@ -18,14 +23,6 @@ interface OverviewCardsProps {
     principleRate: number;
   };
   totalTrades: number;
-}
-
-function formatKRW(amount: number): string {
-  const abs = Math.abs(amount);
-  if (abs >= 1_000_000) {
-    return `${(amount / 1_000_000).toFixed(2)}백만원`;
-  }
-  return `${amount.toLocaleString("ko-KR")}원`;
 }
 
 export function OverviewCards({ stats, totalTrades }: OverviewCardsProps) {
@@ -66,8 +63,7 @@ export function OverviewCards({ stats, totalTrades }: OverviewCardsProps) {
                 : "text-loss"
             )}
           >
-            {isProfitable ? "+" : ""}
-            {formatKRW(stats.totalPnL)}
+            {formatSignedCurrency(stats.totalPnL)}
           </p>
           <p
             className={cn(
@@ -77,8 +73,7 @@ export function OverviewCards({ stats, totalTrades }: OverviewCardsProps) {
                 : "text-loss"
             )}
           >
-            {isProfitable ? "+" : ""}
-            {stats.totalPnLPercent.toFixed(2)}%
+            {formatSignedPercent(stats.totalPnLPercent, 2)}
           </p>
         </div>
         <p className="text-xs text-muted-foreground">전체 매매 누적 손익</p>
@@ -108,7 +103,7 @@ export function OverviewCards({ stats, totalTrades }: OverviewCardsProps) {
               isWinning ? "text-profit" : "text-loss"
             )}
           >
-            {stats.winRate.toFixed(1)}%
+            {formatPercent(stats.winRate, 1)}
           </p>
           <div className="mt-2 h-1.5 rounded-full bg-secondary overflow-hidden">
             <div
@@ -120,7 +115,7 @@ export function OverviewCards({ stats, totalTrades }: OverviewCardsProps) {
             />
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">청산 완료 거래 기준</p>
+        <p className="text-xs text-muted-foreground">매도가 입력된 거래 기준</p>
       </div>
 
       {/* 진행 중인 포지션 */}
@@ -164,7 +159,7 @@ export function OverviewCards({ stats, totalTrades }: OverviewCardsProps) {
         </div>
         <div>
           <p className="text-2xl font-bold font-mono text-warning">
-            {stats.principleRate.toFixed(1)}%
+            {formatPercent(stats.principleRate, 1)}
           </p>
           <div className="mt-2 h-1.5 rounded-full bg-secondary overflow-hidden">
             <div

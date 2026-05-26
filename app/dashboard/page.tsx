@@ -2,9 +2,11 @@
 
 import { Header } from '@/components/trading/header'
 import { OverviewCards } from '@/components/trading/overview-cards'
-import { useEffect, useState } from 'react'
+import { LivePricePanel } from '@/components/trading/live-price-panel'
+import { useCallback, useEffect, useState } from 'react'
 import { fetchAllJournals, getJournalStats } from '@/lib/trading-service'
 import { TradingJournal } from '@/lib/supabase'
+import type { LiveQuote } from '@/lib/market-quotes'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
@@ -12,8 +14,63 @@ import { Plus } from 'lucide-react'
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null)
   const [journals, setJournals] = useState<TradingJournal[]>([])
+  const [quotes, setQuotes] = useState<LiveQuote[]>([])
+  const [quotesLoading, setQuotesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const openPositions = journals.filter((journal) => journal.exit_price == null)
+
+  const loadQuotes = useCallback(async (positions: TradingJournal[]) => {
+    if (positions.length === 0) {
+      setQuotes([])
+      return
+    }
+
+    setQuotesLoading(true)
+
+    try {
+      const response = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          positions: positions.map((position) => ({
+            id: position.id,
+            ticker: position.ticker,
+            company_name: position.company_name,
+            entry_price: position.entry_price,
+            quantity: position.quantity,
+          })),
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('실시간 시세를 불러오지 못했습니다.')
+      }
+
+      const payload = await response.json()
+      setQuotes(payload.quotes ?? [])
+    } catch (quoteError) {
+      console.error('[v0] Quote load error:', quoteError)
+      setQuotes(
+        positions.map((position) => ({
+          journalId: position.id,
+          companyName: position.company_name,
+          inputTicker: position.ticker,
+          resolvedSymbol: null,
+          currency: null,
+          regularMarketPrice: null,
+          previousClose: null,
+          change: null,
+          changePercent: null,
+          marketTime: null,
+          error: '실시간 시세를 불러오지 못했습니다.',
+        }))
+      )
+    } finally {
+      setQuotesLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -24,6 +81,7 @@ export default function DashboardPage() {
         const statsData = await getJournalStats()
         setJournals(journalsData)
         setStats(statsData)
+        await loadQuotes(journalsData.filter((journal) => journal.exit_price == null))
       } catch (err: any) {
         console.error('[v0] Dashboard load error:', err)
         setError(err?.message || '데이터를 불러오지 못했습니다.')
@@ -33,7 +91,7 @@ export default function DashboardPage() {
     }
 
     loadData()
-  }, [])
+  }, [loadQuotes])
 
   if (loading) {
     return (
@@ -83,6 +141,13 @@ export default function DashboardPage() {
             totalTrades={journals.length}
           />
         </section>
+
+        <LivePricePanel
+          positions={openPositions}
+          quotes={quotes}
+          loading={quotesLoading}
+          onRefresh={() => loadQuotes(openPositions)}
+        />
 
         {/* Quick Links */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">

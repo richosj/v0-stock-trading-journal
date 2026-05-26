@@ -7,7 +7,11 @@ import type { TradingJournal } from "@/lib/supabase";
 import { deleteJournal } from "@/lib/trading-service";
 import { toast } from "sonner";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import {
+  formatCurrency,
+  formatSignedCurrency,
+  formatSignedPercent,
+} from "@/lib/trading-calculations";
 
 interface JournalTableProps {
   journals: TradingJournal[];
@@ -15,54 +19,7 @@ interface JournalTableProps {
 
 type FilterType = "전체" | "open" | "closed";
 
-function getDaysRemaining(targetDate: string): number {
-  const target = new Date(targetDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  const diff = target.getTime() - today.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-function DaysBadge({ targetDate, status }: { targetDate?: string; status: string }) {
-  if (status === "closed" || !targetDate) {
-    return (
-      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-muted-foreground">
-        {status === "closed" ? "청산" : "-"}
-      </span>
-    );
-  }
-  const days = getDaysRemaining(targetDate);
-  if (days < 0) {
-    return (
-      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-loss-muted text-loss border border-loss/30">
-        기한초과
-      </span>
-    );
-  }
-  if (days === 0) {
-    return (
-      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-warning-muted text-warning border border-warning/30">
-        D-0
-      </span>
-    );
-  }
-  if (days <= 3) {
-    return (
-      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-warning-muted text-warning border border-warning/30">
-        D-{days}
-      </span>
-    );
-  }
-  return (
-    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-muted-foreground">
-      D-{days}
-    </span>
-  );
-}
-
 export function JournalTable({ journals: initialJournals }: JournalTableProps) {
-  const router = useRouter();
   const [journals, setJournals] = useState(initialJournals);
   const [filter, setFilter] = useState<FilterType>("전체");
   const [search, setSearch] = useState("");
@@ -101,8 +58,8 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
 
   const filtered = journals
     .filter((j) => {
-      if (filter === "open") return j.status === "open";
-      if (filter === "closed") return j.status === "closed";
+      if (filter === "open") return j.exit_price == null;
+      if (filter === "closed") return j.exit_price != null;
       return true;
     })
     .filter((j) => {
@@ -147,7 +104,7 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
             {/* Filter */}
             <div className="flex rounded-lg border border-border overflow-hidden">
               {(["전체", "open", "closed"] as FilterType[]).map((f) => {
-                const label = f === "전체" ? "전체" : f === "open" ? "진행중" : "청산완료";
+                const label = f === "전체" ? "전체" : f === "open" ? "매도 전" : "매도 완료";
                 return (
                   <button
                     key={f}
@@ -175,8 +132,8 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
                 <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground">
                   종목명
                 </th>
-                <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
-                  구분
+                <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
+                  매도가
                 </th>
                 <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
                   <button
@@ -197,9 +154,6 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
                   </button>
                 </th>
                 <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
-                  상태
-                </th>
-                <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">
                   원칙
                 </th>
                 <th className="px-3 py-3 text-xs font-medium text-muted-foreground text-right">
@@ -211,7 +165,7 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={6}
                     className="text-center py-12 text-muted-foreground text-sm"
                   >
                     <Filter className="w-5 h-5 mx-auto mb-2 opacity-40" />
@@ -220,6 +174,10 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
                 </tr>
               ) : (
                 filtered.map((journal) => {
+                  const hasRealizedResult =
+                    journal.exit_price != null &&
+                    journal.pnl != null &&
+                    journal.pnl_percent != null;
                   const isProfitable = (journal.pnl_percent ?? 0) >= 0;
                   return (
                     <tr
@@ -238,17 +196,9 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
                           </div>
                         </Link>
                       </td>
-                      {/* 구분 */}
-                      <td className="px-3 py-4">
-                        <span
-                          className={cn(
-                            "px-2 py-0.5 rounded-full text-xs font-medium",
-                            journal.trade_type === "buy"
-                              ? "bg-profit-muted text-profit"
-                              : "bg-loss-muted text-loss"
-                          )}
-                        >
-                          {journal.trade_type === "buy" ? "매수" : "매도"}
+                      <td className="px-3 py-4 text-right">
+                        <span className="font-mono text-sm text-foreground">
+                          {journal.exit_price != null ? formatCurrency(journal.exit_price) : "-"}
                         </span>
                       </td>
                       {/* 진입일 */}
@@ -266,33 +216,16 @@ export function JournalTable({ journals: initialJournals }: JournalTableProps) {
                                 : "text-loss"
                             )}
                           >
-                            {journal.status === "open" ? "-" : (
-                              <>
-                                {isProfitable ? "+" : ""}
-                                {(journal.pnl_percent ?? 0).toFixed(2)}%
-                              </>
-                            )}
+                            {hasRealizedResult
+                              ? formatSignedPercent(journal.pnl_percent ?? 0, 2)
+                              : "-"}
                           </p>
-                          {journal.status === "closed" && (
+                          {hasRealizedResult && (
                             <p className="text-xs font-mono text-muted-foreground">
-                              {isProfitable ? "+" : ""}
-                              ₩{(journal.pnl ?? 0).toLocaleString()}
+                              {formatSignedCurrency(journal.pnl ?? 0)}
                             </p>
                           )}
                         </div>
-                      </td>
-                      {/* 상태 */}
-                      <td className="px-3 py-4">
-                        <span
-                          className={cn(
-                            "px-2 py-0.5 rounded-full text-xs font-medium",
-                            journal.status === "open"
-                              ? "bg-primary/10 text-primary"
-                              : "bg-secondary text-muted-foreground"
-                          )}
-                        >
-                          {journal.status === "open" ? "진행중" : "청산"}
-                        </span>
                       </td>
                       {/* 원칙 */}
                       <td className="px-3 py-4">

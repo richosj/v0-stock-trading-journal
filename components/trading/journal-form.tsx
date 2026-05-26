@@ -6,6 +6,14 @@ import { cn } from "@/lib/utils";
 import { createJournal } from "@/lib/trading-service";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import {
+  calculateJournalMetrics,
+  formatNumericInput,
+  formatSignedCurrency,
+  formatSignedPercent,
+  sanitizeDecimalInput,
+  sanitizeIntegerInput,
+} from "@/lib/trading-calculations";
 
 const PRESET_TAGS = [
   "차트 돌파",
@@ -20,11 +28,11 @@ const PRESET_TAGS = [
 
 export function JournalForm() {
   const router = useRouter();
-  const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
   const [companyName, setCompanyName] = useState("");
   const [ticker, setTicker] = useState("");
   const [entryPrice, setEntryPrice] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
   const [targetPrice, setTargetPrice] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().slice(0, 10));
@@ -33,6 +41,12 @@ export function JournalForm() {
   const [customTag, setCustomTag] = useState("");
   const [isPrinciple, setIsPrinciple] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  const previewMetrics = calculateJournalMetrics({
+    entry_price: Number(entryPrice) || 0,
+    quantity: Number(quantity) || 0,
+    exit_price: Number(sellPrice) || null,
+  });
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -58,9 +72,9 @@ export function JournalForm() {
     setLoading(true);
     try {
       const result = await createJournal({
-        ticker: ticker.toUpperCase() || companyName.substring(0, 3),
+        ticker: ticker.trim().toUpperCase(),
         company_name: companyName,
-        trade_type: tradeType,
+        trade_type: "buy",
         entry_price: Number(entryPrice),
         quantity: Number(quantity),
         target_price: Number(targetPrice) || 0,
@@ -69,11 +83,11 @@ export function JournalForm() {
         reason,
         strategy: selectedTags.length > 0 ? selectedTags : ["일반"],
         is_principle: isPrinciple,
-        status: "open",
-        exit_price: null,
-        exit_date: null,
-        pnl: null,
-        pnl_percent: null,
+        status: Number(sellPrice) > 0 ? "closed" : "open",
+        exit_price: Number(sellPrice) || null,
+        exit_date: Number(sellPrice) > 0 ? new Date().toISOString().slice(0, 10) : null,
+        pnl: previewMetrics?.pnl ?? null,
+        pnl_percent: previewMetrics?.pnl_percent ?? null,
         scenario_notes: null,
         principle_notes: null,
       });
@@ -85,6 +99,7 @@ export function JournalForm() {
         setTicker("");
         setEntryPrice("");
         setQuantity("");
+        setSellPrice("");
         setTargetPrice("");
         setStopLoss("");
         setTradeDate(new Date().toISOString().slice(0, 10));
@@ -105,10 +120,9 @@ export function JournalForm() {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden max-w-2xl">
+    <div className="rounded-xl border border-border bg-card overflow-hidden max-w-5xl">
       <form onSubmit={handleSubmit} className="px-6 py-6 space-y-5">
-        {/* Row 1: 종목 + 매매구분 */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">
               종목명 <span className="text-loss">*</span>
@@ -128,56 +142,26 @@ export function JournalForm() {
             </label>
             <input
               type="text"
-              placeholder="예: NVDA"
+              placeholder="예: AAPL / 005930"
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
               className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              매매 구분 <span className="text-loss">*</span>
-            </label>
-            <div className="flex rounded-lg border border-border overflow-hidden h-[38px]">
-              <button
-                type="button"
-                onClick={() => setTradeType("buy")}
-                className={cn(
-                  "flex-1 text-sm font-medium transition-colors",
-                  tradeType === "buy"
-                    ? "bg-profit text-white"
-                    : "bg-secondary/60 text-muted-foreground hover:text-foreground"
-                )}
-              >
-                매수
-              </button>
-              <button
-                type="button"
-                onClick={() => setTradeType("sell")}
-                className={cn(
-                  "flex-1 text-sm font-medium transition-colors",
-                  tradeType === "sell"
-                    ? "bg-loss text-white"
-                    : "bg-secondary/60 text-muted-foreground hover:text-foreground"
-                )}
-              >
-                매도
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Row 2: 가격들 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">
               진입가 (원) <span className="text-loss">*</span>
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="0"
-              value={entryPrice}
-              onChange={(e) => setEntryPrice(e.target.value)}
+              value={formatNumericInput(entryPrice)}
+              onChange={(e) => setEntryPrice(sanitizeDecimalInput(e.target.value))}
               className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               required
             />
@@ -187,23 +171,38 @@ export function JournalForm() {
               수량 (주) <span className="text-loss">*</span>
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               placeholder="0"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              value={formatNumericInput(quantity)}
+              onChange={(e) => setQuantity(sanitizeIntegerInput(e.target.value))}
               className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               required
             />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">
-              목표가 — 익절선
+              매도가
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="0"
-              value={targetPrice}
-              onChange={(e) => setTargetPrice(e.target.value)}
+              value={formatNumericInput(sellPrice)}
+              onChange={(e) => setSellPrice(sanitizeDecimalInput(e.target.value))}
+              className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              목표가
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              value={formatNumericInput(targetPrice)}
+              onChange={(e) => setTargetPrice(sanitizeDecimalInput(e.target.value))}
               className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-profit placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-profit/40"
             />
           </div>
@@ -212,10 +211,11 @@ export function JournalForm() {
               손절가 — 스탑로스
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="0"
-              value={stopLoss}
-              onChange={(e) => setStopLoss(e.target.value)}
+              value={formatNumericInput(stopLoss)}
+              onChange={(e) => setStopLoss(sanitizeDecimalInput(e.target.value))}
               className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-loss placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-loss/40"
             />
           </div>
@@ -231,7 +231,9 @@ export function JournalForm() {
               type="date"
               value={tradeDate}
               onChange={(e) => setTradeDate(e.target.value)}
-              className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 [color-scheme:dark]"
+              title="진입 날짜"
+              aria-label="진입 날짜"
+              className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 [color-scheme:light]"
               required
             />
           </div>
@@ -265,6 +267,21 @@ export function JournalForm() {
                 뇌동매매
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-border bg-secondary/30 p-4">
+            <p className="text-xs font-medium text-muted-foreground">자동 계산 손익</p>
+            <p className="mt-2 text-xl font-bold font-mono text-foreground">
+              {previewMetrics ? formatSignedCurrency(previewMetrics.pnl) : "-"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-secondary/30 p-4">
+            <p className="text-xs font-medium text-muted-foreground">자동 계산 수익률</p>
+            <p className="mt-2 text-xl font-bold font-mono text-foreground">
+              {previewMetrics ? formatSignedPercent(previewMetrics.pnl_percent, 2) : "-"}
+            </p>
           </div>
         </div>
 
@@ -338,6 +355,8 @@ export function JournalForm() {
                   <button
                     type="button"
                     onClick={() => toggleTag(tag)}
+                    title={`${tag} 태그 제거`}
+                    aria-label={`${tag} 태그 제거`}
                     className="hover:text-foreground transition-colors"
                   >
                     <X className="w-3 h-3" />

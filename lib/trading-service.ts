@@ -1,4 +1,9 @@
 import { getSupabase, type TradingJournal, type NewTradingJournal } from './supabase'
+import {
+  buildJournalPayload,
+  buildJournalUpdatePayload,
+  normalizeJournal,
+} from './trading-calculations'
 
 export async function fetchAllJournals(): Promise<TradingJournal[]> {
   const supabase = getSupabase()
@@ -12,7 +17,7 @@ export async function fetchAllJournals(): Promise<TradingJournal[]> {
     return []
   }
 
-  return data || []
+  return (data || []).map(normalizeJournal)
 }
 
 export async function fetchJournalById(id: string): Promise<TradingJournal | null> {
@@ -28,16 +33,17 @@ export async function fetchJournalById(id: string): Promise<TradingJournal | nul
     return null
   }
 
-  return data
+  return data ? normalizeJournal(data) : null
 }
 
 export async function createJournal(
   journal: NewTradingJournal
 ): Promise<TradingJournal | null> {
   const supabase = getSupabase()
+  const payload = buildJournalPayload(journal)
   const { data, error } = await supabase
     .from('trading_journals')
-    .insert([journal])
+    .insert([payload])
     .select()
     .single()
 
@@ -46,7 +52,7 @@ export async function createJournal(
     return null
   }
 
-  return data
+  return data ? normalizeJournal(data) : null
 }
 
 export async function updateJournal(
@@ -54,9 +60,21 @@ export async function updateJournal(
   updates: Partial<NewTradingJournal>
 ): Promise<TradingJournal | null> {
   const supabase = getSupabase()
+  const { data: currentJournal, error: fetchError } = await supabase
+    .from('trading_journals')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !currentJournal) {
+    console.error('Error fetching journal for update:', fetchError)
+    return null
+  }
+
+  const payload = buildJournalUpdatePayload(normalizeJournal(currentJournal), updates)
   const { data, error } = await supabase
     .from('trading_journals')
-    .update(updates)
+    .update(payload)
     .eq('id', id)
     .select()
     .single()
@@ -66,7 +84,7 @@ export async function updateJournal(
     return null
   }
 
-  return data
+  return data ? normalizeJournal(data) : null
 }
 
 export async function deleteJournal(id: string): Promise<boolean> {
@@ -98,7 +116,9 @@ export async function getJournalStats() {
       }
     }
 
-    const closedJournals = journals.filter((j) => j.status === 'closed')
+    const closedJournals = journals.filter(
+      (j) => j.status === 'closed' && j.pnl != null && j.pnl_percent != null
+    )
     const wins = closedJournals.filter((j) => (j.pnl || 0) > 0).length
     const winRate = closedJournals.length > 0 ? (wins / closedJournals.length) * 100 : 0
     const principleJournals = journals.filter((j) => j.is_principle).length
@@ -106,10 +126,14 @@ export async function getJournalStats() {
       journals.length > 0 ? (principleJournals / journals.length) * 100 : 0
 
     const totalPnL = closedJournals.reduce((sum, j) => sum + (j.pnl || 0), 0)
+    const totalClosedCost = closedJournals.reduce(
+      (sum, journal) => sum + journal.entry_price * journal.quantity,
+      0
+    )
 
     return {
       totalPnL,
-      totalPnLPercent: totalPnL / journals.length,
+      totalPnLPercent: totalClosedCost > 0 ? (totalPnL / totalClosedCost) * 100 : 0,
       winRate,
       principleRate,
       openPositions: journals.filter((j) => j.status === 'open').length,

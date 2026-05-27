@@ -38,11 +38,14 @@ export default function RecommendationsPage() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto space-y-6 px-4 py-6 sm:space-y-8 sm:py-8">
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">추천 종목</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            뻔한 대형주/ETF를 최대한 제외하고, 오늘 시장 맥락에서 왜 지금 볼지와 리스크를 함께 보여줍니다.
-          </p>
+        <section className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-6 shadow-sm">
+          <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-primary/10 blur-2xl" />
+          <div className="relative">
+            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">추천 종목</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              뻔한 대형주/ETF를 최대한 제외하고, 오늘 시장 맥락에서 왜 지금 볼지와 리스크를 함께 보여줍니다.
+            </p>
+          </div>
         </section>
         <AiMarketBrief brief={brief} loading={loading} error={error} onRefresh={loadBrief} />
       </main>

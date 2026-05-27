@@ -34,11 +34,16 @@ type UsHolding = {
 }
 
 const NAVER_BASE_URL = "https://finance.naver.com"
-const INVESTING_NEWS_RSS_URL = "https://www.investing.com/rss/news.rss"
+const INVESTING_RSS_FEEDS = [
+  "https://www.investing.com/rss/news.rss",
+  "https://www.investing.com/rss/news_25.rss",
+  "https://www.investing.com/rss/news_301.rss",
+]
 const REMOTE_TIMEOUT_MS = 10000
 const MARKET_ITEM_LIMIT = 10
-const GENERAL_NEWS_LIMIT = 8
-const RELATED_NEWS_LIMIT = 6
+const GENERAL_NEWS_LIMIT = 24
+const RELATED_NEWS_LIMIT = 12
+const RSS_PARSE_LIMIT = 80
 
 const US_TICKER_ALIASES: Record<string, string[]> = {
   NVDA: ["nvidia", "엔비디아"],
@@ -205,40 +210,32 @@ function buildHoldingAliases(holding: UsHolding) {
   return [...aliases].filter(Boolean)
 }
 
-function resolveRelatedHolding(title: string, holdings: UsHolding[]) {
-  const normalizedTitle = title.toLowerCase()
+function extractRssImage(itemXml: string): string | null {
+  const candidates = [
+    itemXml.match(/<enclosure[^>]*url="([^"]+)"/)?.[1],
+    itemXml.match(/<media:content[^>]*url="([^"]+)"/)?.[1],
+    itemXml.match(/<media:thumbnail[^>]*url="([^"]+)"/)?.[1],
+    itemXml.match(/<description>([\s\S]*?)<\/description>/)?.[1]?.match(/<img[^>]+src="([^"]+)"/)?.[1],
+    itemXml.match(/<content:encoded>([\s\S]*?)<\/content:encoded>/)?.[1]?.match(/<img[^>]+src="([^"]+)"/)?.[1],
+  ]
 
-  for (const holding of holdings) {
-    const aliases = buildHoldingAliases(holding)
-    if (aliases.some((alias) => normalizedTitle.includes(alias.toLowerCase()))) {
-      return {
-        relatedTicker: holding.ticker.toUpperCase(),
-        relatedLabel: holding.companyName || holding.ticker.toUpperCase(),
-      }
+  for (const raw of candidates) {
+    if (!raw) continue
+    const url = decodeXmlText(raw)
+    if (url.startsWith("http") && !/\.(svg|ico)(\?|$)/i.test(url)) {
+      return url
     }
   }
 
-  return {
-    relatedTicker: null,
-    relatedLabel: null,
-  }
+  return null
 }
 
-export async function fetchUsMarketNews(holdings: UsHolding[]) {
-  const response = await fetch(INVESTING_NEWS_RSS_URL, {
-    headers: {
-      Accept: "application/rss+xml, application/xml, text/xml;q=0.9",
-      "User-Agent": "Mozilla/5.0",
-    },
-    next: { revalidate: 60 * 10 },
-    signal: getAbortSignal(),
-  })
+function parseRssPubDate(value: string) {
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
 
-  if (!response.ok) {
-    throw new Error(`미국 뉴스 조회 실패: ${response.status}`)
-  }
-
-  const xml = await response.text()
+function parseRssItems(xml: string, holdings: UsHolding[]) {
   const items: UsNewsItem[] = []
 
   for (const match of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
@@ -249,7 +246,7 @@ export async function fetchUsMarketNews(holdings: UsHolding[]) {
       itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] ?? ""
     )
     const url = decodeXmlText(itemXml.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? "")
-    const imageUrl = itemXml.match(/<enclosure[^>]*url="([^"]+)"/)?.[1] ?? null
+    const imageUrl = extractRssImage(itemXml)
 
     if (!title || !url) {
       continue
@@ -269,11 +266,104 @@ export async function fetchUsMarketNews(holdings: UsHolding[]) {
     })
   }
 
+  return items
+}
+
+function mergeNewsItems(batches: UsNewsItem[]) {
+  const byUrl = new Map<string, UsNewsItem>()
+
+  for (const item of batches) {
+    const existing = byUrl.get(item.url)
+    if (!existing) {
+      byUrl.set(item.url, item)
+      continue
+    }
+    if (!existing.imageUrl && item.imageUrl) {
+      byUrl.set(item.url, { ...existing, imageUrl: item.imageUrl })
+    }
+  }
+
+  return [...byUrl.values()].sort(
+    (a, b) => parseRssPubDate(b.publishedAt ?? "") - parseRssPubDate(a.publishedAt ?? "")
+  )
+}
+
+function resolveRelatedHolding(title: string, holdings: UsHolding[]) {
+  const normalizedTitle = title.toLowerCase()
+
+  for (const holding of holdings) {
+    const aliases = buildHoldingAliases(holding)
+    if (aliases.some((alias) => normalizedTitle.includes(alias.toLowerCase()))) {
+      return {
+        relatedTicker: holding.ticker.toUpperCase(),
+        relatedLabel: holding.companyName || holding.ticker.toUpperCase(),
+      }
+    }
+  }
+
   return {
-    headlines: items.slice(0, GENERAL_NEWS_LIMIT),
+    relatedTicker: null,
+    relatedLabel: null,
+  }
+}
+
+async function fetchInvestingRssFeed(feedUrl: string) {
+  const response = await fetch(feedUrl, {
+    headers: {
+      Accept: "application/rss+xml, application/xml, text/xml;q=0.9",
+      "User-Agent": "Mozilla/5.0",
+    },
+    next: { revalidate: 60 * 10 },
+    signal: getAbortSignal(),
+  })
+
+  if (!response.ok) {
+    return ""
+  }
+
+  return response.text()
+}
+
+export async function fetchUsMarketNews(holdings: UsHolding[]) {
+  const xmlBodies = await Promise.all(INVESTING_RSS_FEEDS.map((url) => fetchInvestingRssFeed(url)))
+  const parsed = xmlBodies.flatMap((xml) => (xml ? parseRssItems(xml, holdings) : []))
+
+  if (parsed.length === 0) {
+    throw new Error("미국 뉴스 조회 실패")
+  }
+
+  const items = mergeNewsItems(parsed).slice(0, RSS_PARSE_LIMIT)
+
+  const withImages = items.filter((item) => item.imageUrl)
+  const headlinesPool = withImages.length >= 6 ? withImages : items
+
+  return {
+    headlines: headlinesPool.slice(0, GENERAL_NEWS_LIMIT),
     related: items
       .filter((item) => item.relatedTicker)
       .slice(0, RELATED_NEWS_LIMIT),
     fetchedAt: new Date().toISOString(),
   }
+}
+
+export function getNaverStockLogoUrl(code: string) {
+  return `https://ssl.pstatic.net/imgstock/fn/real/logo/naver/${code}.png`
+}
+
+export function formatMarketTimestamp(value: string | null) {
+  if (!value) {
+    return "방금 전"
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }

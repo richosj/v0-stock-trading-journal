@@ -25,7 +25,7 @@ const moodClass: Record<DailyAiBrief["marketMood"], string> = {
 
 export function AiMarketBrief({ brief, loading, error, onRefresh }: AiMarketBriefProps) {
   return (
-    <section className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-card to-card p-5">
+    <section className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">

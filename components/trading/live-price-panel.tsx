@@ -250,6 +250,27 @@ export function LivePricePanel({
                   : null;
               const isUp = (quote?.change ?? 0) >= 0;
               const isGain = (unrealizedPnL ?? 0) >= 0;
+              const alertBadges: Array<{ label: string; tone: "profit" | "loss" }> = [];
+
+              if (hasLivePrice && position.target_price > 0 && quote!.regularMarketPrice! >= position.target_price) {
+                alertBadges.push({ label: "목표가 도달", tone: "profit" });
+              } else if (
+                hasLivePrice &&
+                position.target_price > 0 &&
+                quote!.regularMarketPrice! >= position.target_price * 0.97
+              ) {
+                alertBadges.push({ label: "목표가 근접", tone: "profit" });
+              }
+
+              if (hasLivePrice && position.stop_loss > 0 && quote!.regularMarketPrice! <= position.stop_loss) {
+                alertBadges.push({ label: "손절가 이탈", tone: "loss" });
+              } else if (
+                hasLivePrice &&
+                position.stop_loss > 0 &&
+                quote!.regularMarketPrice! <= position.stop_loss * 1.03
+              ) {
+                alertBadges.push({ label: "손절가 근접", tone: "loss" });
+              }
 
               return (
                 <div
@@ -283,6 +304,19 @@ export function LivePricePanel({
                       >
                         {hasLivePrice ? "실시간 반영" : "조회 불가"}
                       </span>
+                      {alertBadges.map((badge) => (
+                        <span
+                          key={badge.label}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+                            badge.tone === "profit"
+                              ? "bg-profit-muted text-profit"
+                              : "bg-loss-muted text-loss"
+                          )}
+                        >
+                          {badge.label}
+                        </span>
+                      ))}
                     </div>
                   </div>
 

@@ -3,6 +3,7 @@
 import { Header } from '@/components/trading/header'
 import { OverviewCards } from '@/components/trading/overview-cards'
 import { LivePricePanel } from '@/components/trading/live-price-panel'
+import { DashboardInsights } from '@/components/trading/dashboard-insights'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchAllJournals, getJournalStats } from '@/lib/trading-service'
 import type { TradingJournal } from '@/lib/supabase'
@@ -156,6 +157,8 @@ export default function DashboardPage() {
           loading={quotesLoading}
           onRefresh={() => loadQuotes(openPositions)}
         />
+
+        <DashboardInsights journals={journals} quotes={quotes} />
 
         {/* Quick Links */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">

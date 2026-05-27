@@ -1,6 +1,7 @@
 'use client'
 
 import { Header } from '@/components/trading/header'
+import { JournalCalendar } from '@/components/trading/journal-calendar'
 import { JournalTable } from '@/components/trading/journal-table'
 import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
@@ -73,6 +74,9 @@ export default function JournalPage() {
               </Button>
             </Link>
           ) : null}
+        </div>
+        <div className="mb-6 sm:mb-8">
+          <JournalCalendar journals={journals} />
         </div>
         <JournalTable journals={journals} canWrite={session?.canWrite ?? false} />
       </main>

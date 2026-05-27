@@ -248,6 +248,36 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   const totalBoughtLabel = formatQuantity(rollup.totalBoughtQuantity)
   const totalSoldLabel = formatQuantity(rollup.totalSoldQuantity)
   const ownerLabel = getOwnerLabel(journal.owner_key)
+  let buyStep = 0
+  let sellStep = 0
+  let runningQuantity = 0
+  let runningCost = 0
+
+  const fillTimeline = fills.map((fill) => {
+    if (fill.fill_type === 'buy') {
+      buyStep += 1
+      runningQuantity += fill.quantity
+      runningCost += fill.price * fill.quantity
+    } else {
+      sellStep += 1
+      const quantityToSell = Math.min(fill.quantity, runningQuantity)
+      const averageCost = runningQuantity > 0 ? runningCost / runningQuantity : 0
+      runningQuantity -= quantityToSell
+      runningCost -= averageCost * quantityToSell
+      if (runningQuantity === 0) {
+        runningCost = 0
+      }
+    }
+
+    const averageCost = runningQuantity > 0 ? runningCost / runningQuantity : 0
+
+    return {
+      ...fill,
+      sequenceLabel: `${fill.fill_type === 'buy' ? `${buyStep}차 매수` : `${sellStep}차 매도`}`,
+      remainingQuantity: runningQuantity,
+      averageCost,
+    }
+  })
 
   return (
     <div className="min-h-screen bg-background">
@@ -555,17 +585,20 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                     아직 기록된 체결 내역이 없습니다.
                   </div>
                 ) : (
-                  fills.map((fill) => (
+                  fillTimeline.map((fill) => (
                     <div
                       key={fill.id}
                       className="rounded-xl border border-border bg-secondary/20 p-4"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Badge variant={fill.fill_type === 'buy' ? 'default' : 'secondary'}>
                               {fill.fill_type === 'buy' ? '매수' : '매도'}
                             </Badge>
+                            <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-foreground">
+                              {fill.sequenceLabel}
+                            </span>
                             <span className="text-sm text-muted-foreground">
                               {new Date(fill.fill_date).toLocaleDateString('ko-KR')}
                             </span>
@@ -573,6 +606,20 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                           <p className="text-sm font-semibold text-foreground">
                             {formatCurrency(fill.price)} · {formatQuantity(fill.quantity)}
                           </p>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="rounded-lg bg-background px-3 py-2 text-xs text-muted-foreground">
+                              남은 수량:{" "}
+                              <span className="font-semibold text-foreground">
+                                {formatQuantity(fill.remainingQuantity)}
+                              </span>
+                            </div>
+                            <div className="rounded-lg bg-background px-3 py-2 text-xs text-muted-foreground">
+                              잔여 평균단가:{" "}
+                              <span className="font-semibold text-foreground">
+                                {fill.remainingQuantity > 0 ? formatCurrency(fill.averageCost) : '-'}
+                              </span>
+                            </div>
+                          </div>
                           {fill.memo && (
                             <p className="text-sm text-muted-foreground">{fill.memo}</p>
                           )}

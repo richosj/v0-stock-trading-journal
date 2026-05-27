@@ -97,8 +97,22 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
     min-height: 100vh;
+  }
+
+  body.has-mobile-bottom-nav {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (min-width: 768px) {
+    body.has-mobile-bottom-nav {
+      padding-bottom: 0;
+    }
   }
 }

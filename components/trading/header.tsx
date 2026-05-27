@@ -1,85 +1,199 @@
-"use client";
+"use client"
 
-import { BookOpen, LogOut } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
-import { useAuth } from "@/components/auth-provider";
+import { useState, type ComponentType } from "react"
+import { BookOpen, LogOut, Menu } from "lucide-react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/auth-provider"
+import { buildNavItems, isNavActive } from "@/lib/nav-config"
+import { ScrollToTop } from "@/components/trading/scroll-to-top"
+import { MobileBottomNav } from "@/components/trading/mobile-bottom-nav"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet"
 
 export function Header() {
-  const pathname = usePathname();
-  const { session, logout } = useAuth();
+  const pathname = usePathname()
+  const { session, logout } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
 
-  const isActive = (path: string) => pathname === path;
+  const navItems = buildNavItems(session?.canWrite ?? false)
 
-  const navItems = [
-    { href: "/dashboard", label: "대시보드" },
-    { href: "/market/kr", label: "오늘의 국장" },
-    { href: "/market/us", label: "오늘의 미장" },
-    { href: "/recommendations", label: "추천 종목" },
-    { href: "/insights", label: "복기 인사이트" },
-    { href: "/journal", label: "매매 일지" },
-    ...(session?.canWrite ? [{ href: "/create", label: "새 일지" }] : []),
-  ];
+  const NavLink = ({
+    href,
+    label,
+    icon: Icon,
+    onNavigate,
+    large,
+  }: {
+    href: string
+    label: string
+    icon: ComponentType<{ className?: string }>
+    onNavigate?: () => void
+    large?: boolean
+  }) => {
+    const active = isNavActive(pathname, href)
+
+    return (
+      <Link
+        href={href}
+        onClick={onNavigate}
+        className={cn(
+          "flex items-center gap-3 rounded-xl font-medium transition-colors",
+          large ? "px-4 py-3.5 text-base" : "px-3 py-2 text-sm",
+          active
+            ? "bg-primary text-primary-foreground"
+            : "text-foreground hover:bg-secondary/80"
+        )}
+      >
+        <Icon className={cn("shrink-0", large ? "h-5 w-5" : "h-4 w-4")} aria-hidden />
+        {label}
+      </Link>
+    )
+  }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 py-3 sm:h-14 sm:flex-row sm:items-center sm:justify-between sm:py-0">
-          {/* Logo */}
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2.5 flex-shrink-0 hover:opacity-80 transition-opacity"
-          >
-            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary">
-              <BookOpen className="w-3.5 h-3.5 text-primary-foreground" />
-            </div>
-            <div className="hidden sm:flex items-center gap-2">
-              <span className="font-bold text-foreground text-sm">
-                매매 복기 일지
-              </span>
-              <span className="text-xs text-muted-foreground font-mono bg-secondary px-2 py-0.5 rounded">
-                {session?.label ?? "미인증"}
-              </span>
-            </div>
-          </Link>
+    <>
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-14 items-center justify-between gap-3">
+            <Link
+              href="/dashboard"
+              className="flex min-w-0 items-center gap-2.5 hover:opacity-80 transition-opacity"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
+                <BookOpen className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <div className="min-w-0">
+                <span className="block truncate text-sm font-bold text-foreground sm:text-base">
+                  매매 복기 일지
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground sm:hidden">
+                  {session?.label ?? "미인증"}
+                </span>
+              </div>
+            </Link>
 
-          {/* Navigation */}
-          <nav className="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
+            {/* Desktop navigation */}
+            <nav
+              className="hidden lg:flex flex-1 items-center justify-center gap-0.5 px-4"
+              aria-label="메인 메뉴"
+            >
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors xl:px-3",
+                    isNavActive(pathname, item.href)
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
+                aria-label="메뉴 열기"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="hidden sm:inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                aria-label="로그아웃"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>로그아웃</span>
+              </button>
+
+              <div
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-primary/15"
+                title={session?.label ?? ""}
+              >
+                <span className="text-xs font-bold text-primary">
+                  {session?.label?.slice(0, 1) ?? "?"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tablet: wrapped grid (no horizontal scroll) */}
+          <nav
+            className="hidden md:grid lg:hidden grid-cols-3 gap-1 border-t border-border/60 py-2"
+            aria-label="태블릿 메뉴"
+          >
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                  isActive(item.href)
+                  "rounded-lg px-2 py-2 text-center text-xs font-medium transition-colors",
+                  isNavActive(pathname, item.href)
                     ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                    : "text-muted-foreground hover:bg-secondary/60"
                 )}
               >
-                {item.label}
+                {item.shortLabel ?? item.label}
               </Link>
             ))}
           </nav>
+        </div>
+      </header>
 
-          <div className="flex items-center gap-2 sm:ml-auto">
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent side="left" className="flex h-full w-[min(100vw-2rem,320px)] flex-col p-0">
+          <SheetHeader className="border-b border-border p-4 text-left">
+            <SheetTitle>메뉴</SheetTitle>
+            <SheetDescription>
+              {session?.label ?? "게스트"} · 원하는 화면으로 이동하세요
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex flex-col gap-1 p-3">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                large
+                onNavigate={() => setMenuOpen(false)}
+              />
+            ))}
+          </div>
+
+          <div className="mt-auto border-t border-border p-4">
             <button
               type="button"
-              onClick={() => logout()}
-              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              aria-label="로그아웃"
+              onClick={() => {
+                setMenuOpen(false)
+                logout()
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background py-3 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
             >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">로그아웃</span>
+              <LogOut className="h-4 w-4" />
+              로그아웃
             </button>
-            <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
-              <span className="text-xs font-bold text-primary">
-                {session?.label?.slice(0, 1) ?? "?"}
-              </span>
-            </div>
           </div>
-        </div>
-      </div>
-    </header>
-  );
+        </SheetContent>
+      </Sheet>
+
+      <MobileBottomNav onOpenMenu={() => setMenuOpen(true)} />
+      <ScrollToTop />
+    </>
+  )
 }

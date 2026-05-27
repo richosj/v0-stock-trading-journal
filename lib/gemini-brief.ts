@@ -4,6 +4,7 @@ import type { AuthSession } from "@/lib/auth/shared"
 import type { TradingJournal } from "@/lib/supabase"
 import type { KoreaMarketSnapshot, UsNewsItem } from "@/lib/market-feed"
 import type { DailyAiBrief } from "@/lib/gemini-brief-types"
+import { buildHoldingsNotesFromJournals } from "@/lib/holdings-notes"
 
 export type { DailyAiBrief } from "@/lib/gemini-brief-types"
 
@@ -96,7 +97,7 @@ function getGeminiModel() {
 
 function buildCacheKey(session: AuthSession) {
   const hourBucket = new Date().toISOString().slice(0, 13)
-  return `${session.role}:${session.ownerKey ?? "all"}:${hourBucket}`
+  return `${session.role}:${session.ownerKey ?? "all"}:journal-notes:${hourBucket}`
 }
 
 function summarizeJournals(journals: TradingJournal[]) {
@@ -113,6 +114,10 @@ function summarizeJournals(journals: TradingJournal[]) {
       target: journal.target_price || null,
       stop: journal.stop_loss || null,
       tags: journal.strategy ?? [],
+      reason: journal.reason?.trim() || null,
+      scenarioNotes: journal.scenario_notes?.trim() || null,
+      principleNotes: journal.principle_notes?.trim() || null,
+      isPrinciple: journal.is_principle,
     })),
     recentClosed: closed.map((journal) => ({
       company: journal.company_name,
@@ -142,7 +147,7 @@ function buildPrompt(context: BriefContext) {
 - ETF/ETN/레버리지 상품은 watchlist에서 제외하고 일반 주식 위주
 - 누구나 아는 초대형 대표주(예: 삼성전자/엔비디아/애플/테슬라 등) 반복 추천 지양
 - "왜 지금 보는지(촉매/수급)"와 "무엇을 확인해야 하는지(리스크)"를 구체적으로 작성
-- holdingsNotes는 사용자 보유(미청산) 종목만, 없으면 빈 배열
+- holdingsNotes는 빈 배열 [] 로 두세요 (보유 메모는 앱이 일지 원문으로 채움)
 - JSON만 출력
 
 사용자: ${context.session.label}
@@ -247,16 +252,7 @@ function normalizeBrief(raw: unknown, context: BriefContext): DailyAiBrief {
 
       return filled.slice(0, 5)
     })(),
-    holdingsNotes: Array.isArray(payload.holdingsNotes)
-      ? payload.holdingsNotes
-          .filter((item) => item?.name)
-          .slice(0, 6)
-          .map((item) => ({
-            name: String(item.name),
-            ticker: String(item.ticker ?? ""),
-            note: String(item.note ?? ""),
-          }))
-      : [],
+    holdingsNotes: buildHoldingsNotesFromJournals(context.journals),
     caution: payload.caution?.trim() || "충동 매매 없이 계획된 진입만 검토하세요.",
     generatedAt: new Date().toISOString(),
   }

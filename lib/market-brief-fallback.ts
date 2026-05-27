@@ -2,6 +2,7 @@ import type { AuthSession } from "@/lib/auth/shared"
 import type { TradingJournal } from "@/lib/supabase"
 import type { KoreaMarketSnapshot, UsNewsItem } from "@/lib/market-feed"
 import type { DailyAiBrief } from "@/lib/gemini-brief-types"
+import { buildHoldingsNotesFromJournals } from "@/lib/holdings-notes"
 
 type FallbackContext = {
   session: AuthSession
@@ -59,17 +60,6 @@ function buildWatchlist(korea: KoreaMarketSnapshot, openHoldings: TradingJournal
   })
 }
 
-function buildHoldingsNotes(journals: TradingJournal[]) {
-  return journals
-    .filter((journal) => journal.exit_price == null)
-    .slice(0, 6)
-    .map((journal) => ({
-      name: journal.company_name,
-      ticker: journal.ticker || "",
-      note: `평균단가 ${journal.entry_price.toLocaleString("ko-KR")}원 기준으로 목표가·손절가를 다시 점검하세요.`,
-    }))
-}
-
 function inferMarketMood(korea: KoreaMarketSnapshot): DailyAiBrief["marketMood"] {
   const changes = korea.gainers
     .slice(0, 5)
@@ -121,7 +111,7 @@ export function buildFallbackMarketBrief(context: FallbackContext): DailyAiBrief
         : "시장 데이터를 기반으로 오늘 브리핑을 생성했습니다.",
     marketMood: mood,
     watchlist: buildWatchlist(context.korea, openHoldings),
-    holdingsNotes: buildHoldingsNotes(context.journals),
+    holdingsNotes: buildHoldingsNotesFromJournals(context.journals),
     caution:
       principleRate < 70
         ? "최근 뇌동매매 비중이 높습니다. 신규 진입 전에 기록된 시나리오를 먼저 확인하세요."

@@ -119,20 +119,32 @@ export function AiMarketBrief({ brief, loading, error, onRefresh }: AiMarketBrie
 
             <div className="rounded-xl border border-border bg-background/80 p-5">
               <h3 className="font-semibold text-foreground">내 보유 종목 메모</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                매매 일지에 적어 둔 진입 이유·시나리오·원칙 메모를 그대로 보여줍니다.
+              </p>
               <div className="mt-4 space-y-3">
                 {brief.holdingsNotes.length > 0 ? (
                   brief.holdingsNotes.map((item) => (
-                    <div key={`${item.ticker}-${item.name}`} className="rounded-lg border border-border px-4 py-3">
+                    <div
+                      key={`${item.ticker}-${item.name}`}
+                      className="rounded-lg border border-border bg-background px-4 py-3"
+                    >
                       <p className="font-medium text-foreground">
                         {item.name}
-                        {item.ticker ? ` · ${item.ticker}` : ""}
+                        {item.ticker ? (
+                          <span className="ml-1 font-mono text-xs text-muted-foreground">
+                            {item.ticker}
+                          </span>
+                        ) : null}
                       </p>
-                      <p className="mt-2 text-sm text-muted-foreground">{item.note}</p>
+                      <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground/90">
+                        {item.note}
+                      </p>
                     </div>
                   ))
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    현재 진행 중인 보유 종목이 없거나, 별도 메모가 생성되지 않았습니다.
+                    현재 진행 중인 보유 종목이 없습니다. 일지에서 미청산 종목을 등록하면 여기에 메모가 표시됩니다.
                   </p>
                 )}
               </div>

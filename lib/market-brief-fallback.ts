@@ -15,6 +15,17 @@ function isLikelyDerivative(name: string) {
   return /KODEX|TIGER|ETN|ETF|레버리지|인버스|RISE|SOL |ACE |PLUS |HANARO/i.test(name)
 }
 
+function isCommonIdea(name: string, ticker: string) {
+  const normalizedName = name.trim().toLowerCase()
+  const normalizedTicker = ticker.trim().toUpperCase()
+  if (["005930", "000660", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL"].includes(normalizedTicker)) {
+    return true
+  }
+  return ["삼성전자", "sk하이닉스", "애플", "엔비디아", "테슬라", "마이크로소프트", "아마존"].some((entry) =>
+    normalizedName.includes(entry)
+  )
+}
+
 function buildWatchlist(korea: KoreaMarketSnapshot, openHoldings: TradingJournal[]) {
   const holdingKeys = new Set(
     openHoldings.flatMap((journal) => [
@@ -25,6 +36,7 @@ function buildWatchlist(korea: KoreaMarketSnapshot, openHoldings: TradingJournal
 
   const candidates = [...korea.popular.slice(0, 5), ...korea.gainers.slice(0, 5)]
     .filter((item) => !isLikelyDerivative(item.name))
+    .filter((item) => !isCommonIdea(item.name, item.code))
     .filter((item, index, array) => array.findIndex((entry) => entry.code === item.code) === index)
     .slice(0, 5)
 
@@ -40,8 +52,8 @@ function buildWatchlist(korea: KoreaMarketSnapshot, openHoldings: TradingJournal
     return {
       name: item.name,
       ticker: item.code,
-      reason: `검색/시장 흐름 상위에 올라온 종목입니다. 현재 ${changeText} 구간입니다.`,
-      risk: "급등·거래 집중 구간은 추격 매수에 유의하세요.",
+      reason: `오늘 검색/시장 흐름 상위이며 단기 수급이 붙는 구간입니다. 현재 ${changeText}입니다.`,
+      risk: "거래대금 유지 여부와 전일 고점 돌파 실패 구간을 먼저 확인하세요.",
       relation: isHolding ? "현재 보유 중인 종목입니다." : null,
     }
   })

@@ -144,6 +144,7 @@ function NewsCard({
                     </span>
                   </div>
                   <p className="mt-2 text-sm font-medium leading-6 text-foreground">{item.title}</p>
+                  <p className="mt-2 text-xs leading-5 text-primary/90">한줄 해석: {item.koreanSummary}</p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     {item.author ?? "Investing.com"} · 원문 보기
                   </p>

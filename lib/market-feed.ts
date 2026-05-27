@@ -19,6 +19,7 @@ export type KoreaMarketSnapshot = {
 
 export type UsNewsItem = {
   title: string
+  koreanSummary: string
   author: string | null
   publishedAt: string | null
   url: string
@@ -49,6 +50,17 @@ const US_TICKER_ALIASES: Record<string, string[]> = {
   AMZN: ["amazon", "아마존"],
   NFLX: ["netflix", "넷플릭스"],
 }
+
+const NEWS_KEYWORD_HINTS: Array<{ pattern: RegExp; hint: string }> = [
+  { pattern: /\bfed\b|interest rate|inflation|cpi|pce/i, hint: "금리/물가 변수에 민감한 장세입니다." },
+  { pattern: /earnings|guidance|forecast|revenue|profit/i, hint: "실적 발표/가이던스 이슈가 핵심입니다." },
+  { pattern: /chip|semiconductor|ai|nvidia/i, hint: "AI/반도체 수급 흐름과 연동된 뉴스입니다." },
+  { pattern: /oil|crude|opec|energy|gas/i, hint: "원자재·에너지 가격 변동성이 반영된 이슈입니다." },
+  { pattern: /tariff|export|trade|china|geopolitical/i, hint: "무역/지정학 변수에 영향을 받는 뉴스입니다." },
+  { pattern: /tesla|ev|electric vehicle|battery/i, hint: "전기차/배터리 섹터 심리에 영향이 있습니다." },
+  { pattern: /downgrade|upgrade|target price|analyst/i, hint: "애널리스트 의견·목표가 조정 이슈입니다." },
+  { pattern: /merger|acquisition|deal|takeover/i, hint: "인수합병/계약 모멘텀 관련 소식입니다." },
+]
 
 function getAbortSignal() {
   return AbortSignal.timeout(REMOTE_TIMEOUT_MS)
@@ -163,6 +175,20 @@ function decodeXmlText(value: string) {
     .trim()
 }
 
+function buildKoreanNewsHint(title: string) {
+  const normalized = title.trim()
+  if (!normalized) {
+    return "미국 시장 주요 이슈 기사입니다."
+  }
+
+  const matched = NEWS_KEYWORD_HINTS.find((entry) => entry.pattern.test(normalized))
+  if (matched) {
+    return matched.hint
+  }
+
+  return "기사 제목 기준으로 단기 수급/심리 변화를 확인할 필요가 있습니다."
+}
+
 function buildHoldingAliases(holding: UsHolding) {
   const ticker = holding.ticker.trim().toUpperCase()
   const rawAlias = COMPANY_SYMBOL_ALIASES[holding.companyName]
@@ -233,6 +259,7 @@ export async function fetchUsMarketNews(holdings: UsHolding[]) {
 
     items.push({
       title,
+      koreanSummary: buildKoreanNewsHint(title),
       author: author || null,
       publishedAt: publishedAt || null,
       url,

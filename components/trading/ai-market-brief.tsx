@@ -32,9 +32,9 @@ export function AiMarketBrief({ brief, loading, error, onRefresh }: AiMarketBrie
             <Sparkles className="h-3.5 w-3.5" />
             {brief?.source === "fallback" ? "시장 데이터 브리핑" : "Gemini AI 브리핑"}
           </div>
-          <h2 className="mt-3 text-xl font-semibold text-foreground">오늘의 주목 포인트</h2>
+          <h2 className="mt-3 text-xl font-semibold text-foreground">AI 추천 종목 브리핑</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            시장 데이터, 뉴스, 내 매매 기록을 바탕으로 오늘 볼 종목과 주의점을 정리합니다.
+            시장 데이터, 뉴스, 내 매매 기록을 바탕으로 왜 지금 볼지와 어떤 리스크를 볼지까지 정리합니다.
           </p>
         </div>
         <button
@@ -102,8 +102,10 @@ export function AiMarketBrief({ brief, loading, error, onRefresh }: AiMarketBrie
                           <p className="mt-1 text-xs font-mono text-muted-foreground">{item.ticker || "티커 없음"}</p>
                         </div>
                       </div>
-                      <p className="mt-3 text-sm text-foreground">{item.reason}</p>
-                      <p className="mt-2 text-xs text-loss">주의: {item.risk}</p>
+                      <p className="mt-3 text-xs font-semibold text-primary">왜 지금?</p>
+                      <p className="mt-1 text-sm text-foreground">{item.reason}</p>
+                      <p className="mt-2 text-xs font-semibold text-loss">무엇을 조심?</p>
+                      <p className="mt-1 text-xs text-loss">{item.risk}</p>
                       {item.relation ? (
                         <p className="mt-2 text-xs text-primary">내 기록 연관: {item.relation}</p>
                       ) : null}

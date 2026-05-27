@@ -3,11 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Header } from '@/components/trading/header'
 import { TodayMarketHub } from '@/components/trading/today-market-hub'
-import { AiMarketBrief } from '@/components/trading/ai-market-brief'
 import { fetchAllJournals } from '@/lib/trading-service'
 import type { TradingJournal } from '@/lib/supabase'
 import type { KoreaMarketSnapshot, UsNewsItem } from '@/lib/market-feed'
-import type { DailyAiBrief } from '@/lib/gemini-brief-types'
 
 type UsNewsPayload = {
   headlines?: UsNewsItem[]
@@ -25,9 +23,6 @@ export default function MarketPage() {
   const [relatedNews, setRelatedNews] = useState<UsNewsItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [aiBrief, setAiBrief] = useState<DailyAiBrief | null>(null)
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError] = useState<string | null>(null)
 
   const usHoldings = useMemo(() => {
     const unique = new Map<string, { ticker: string; companyName: string }>()
@@ -48,27 +43,6 @@ export default function MarketPage() {
 
     return [...unique.values()]
   }, [journals])
-
-  const loadAiBrief = async () => {
-    setAiLoading(true)
-    setAiError(null)
-
-    try {
-      const response = await fetch('/api/ai/daily-brief', { cache: 'no-store' })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        throw new Error(payload?.error || 'AI 브리핑을 불러오지 못했습니다.')
-      }
-
-      const payload = (await response.json()) as { brief: DailyAiBrief }
-      setAiBrief(payload.brief ?? null)
-    } catch (err: any) {
-      setAiError(err?.message || 'AI 브리핑을 불러오지 못했습니다.')
-    } finally {
-      setAiLoading(false)
-    }
-  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -105,7 +79,6 @@ export default function MarketPage() {
         setKorea(koreaPayload.market ?? null)
         setHeadlines(newsPayload.news?.headlines ?? [])
         setRelatedNews(newsPayload.news?.related ?? [])
-        await loadAiBrief()
       } catch (err: any) {
         console.error('[v0] Market page load error:', err)
         setError(err?.message || '오늘 시장 데이터를 불러오지 못했습니다.')
@@ -128,15 +101,6 @@ export default function MarketPage() {
           loading={loading}
           error={error}
         />
-
-        {!loading && !error ? (
-          <AiMarketBrief
-            brief={aiBrief}
-            loading={aiLoading}
-            error={aiError}
-            onRefresh={loadAiBrief}
-          />
-        ) : null}
 
         {!loading && !error && usHoldings.length > 0 ? (
           <section className="rounded-2xl border border-border bg-card p-5">

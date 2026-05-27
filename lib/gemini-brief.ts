@@ -15,6 +15,68 @@ type BriefContext = {
   relatedNews: UsNewsItem[]
 }
 
+const COMMON_TICKERS = new Set([
+  "005930",
+  "000660",
+  "035420",
+  "207940",
+  "373220",
+  "AAPL",
+  "MSFT",
+  "NVDA",
+  "TSLA",
+  "AMZN",
+  "META",
+  "GOOGL",
+  "NFLX",
+])
+
+const COMMON_NAMES = [
+  "삼성전자",
+  "sk하이닉스",
+  "네이버",
+  "lg에너지솔루션",
+  "애플",
+  "엔비디아",
+  "테슬라",
+  "마이크로소프트",
+  "아마존",
+  "메타",
+  "알파벳",
+]
+
+function isCommonIdea(name: string, ticker: string) {
+  const normalizedName = name.trim().toLowerCase()
+  const normalizedTicker = ticker.trim().toUpperCase()
+  if (COMMON_TICKERS.has(normalizedTicker)) {
+    return true
+  }
+  return COMMON_NAMES.some((entry) => normalizedName.includes(entry))
+}
+
+function isDerivativeIdea(name: string) {
+  return /KODEX|TIGER|ETN|ETF|레버리지|인버스|RISE|SOL |ACE |PLUS |HANARO/i.test(name)
+}
+
+function buildFallbackIdeas(context: BriefContext) {
+  const merged = [...context.korea.gainers.slice(0, 10), ...context.korea.active.slice(0, 10)]
+  const deduped = merged.filter(
+    (item, index, array) => array.findIndex((entry) => entry.code === item.code) === index
+  )
+
+  return deduped
+    .filter((item) => !isDerivativeIdea(item.name))
+    .filter((item) => !isCommonIdea(item.name, item.code))
+    .slice(0, 5)
+    .map((item) => ({
+      name: item.name,
+      ticker: item.code,
+      reason: `오늘 거래/상승 상위에 있으며 단기 수급이 붙는 구간입니다. ${item.changePercent != null ? `현재 ${item.changePercent >= 0 ? "+" : ""}${item.changePercent.toFixed(2)}% 흐름입니다.` : "변동률은 장중 재확인이 필요합니다."}`,
+      risk: "뉴스 추격 매수보다 거래대금 유지와 지지 구간 재확인 후 접근하세요.",
+      relation: null,
+    }))
+}
+
 const DEFAULT_MODEL = "gemini-2.0-flash"
 const BRIEF_CACHE_MS = 60 * 60 * 1000
 
@@ -78,6 +140,8 @@ function buildPrompt(context: BriefContext) {
 - 매수/매도 추천, 수익 보장, 단정적 예측 금지
 - watchlist는 3~5개, 시장 데이터와 뉴스, 사용자 보유 종목을 근거로 작성
 - ETF/ETN/레버리지 상품은 watchlist에서 제외하고 일반 주식 위주
+- 누구나 아는 초대형 대표주(예: 삼성전자/엔비디아/애플/테슬라 등) 반복 추천 지양
+- "왜 지금 보는지(촉매/수급)"와 "무엇을 확인해야 하는지(리스크)"를 구체적으로 작성
 - holdingsNotes는 사용자 보유(미청산) 종목만, 없으면 빈 배열
 - JSON만 출력
 
@@ -140,7 +204,7 @@ ${JSON.stringify(
 }`
 }
 
-function normalizeBrief(raw: unknown): DailyAiBrief {
+function normalizeBrief(raw: unknown, context: BriefContext): DailyAiBrief {
   const payload = raw as Partial<DailyAiBrief>
   const marketMood =
     payload.marketMood === "risk-on" ||
@@ -152,18 +216,37 @@ function normalizeBrief(raw: unknown): DailyAiBrief {
   return {
     summary: payload.summary?.trim() || "오늘 시장 브리핑을 생성했습니다.",
     marketMood,
-    watchlist: Array.isArray(payload.watchlist)
-      ? payload.watchlist
-          .filter((item) => item?.name)
-          .slice(0, 5)
-          .map((item) => ({
-            name: String(item.name),
-            ticker: String(item.ticker ?? ""),
-            reason: String(item.reason ?? ""),
-            risk: String(item.risk ?? ""),
-            relation: item.relation ? String(item.relation) : null,
-          }))
-      : [],
+    watchlist: (() => {
+      const aiList = Array.isArray(payload.watchlist)
+        ? payload.watchlist
+            .filter((item) => item?.name)
+            .slice(0, 7)
+            .map((item) => ({
+              name: String(item.name),
+              ticker: String(item.ticker ?? ""),
+              reason: String(item.reason ?? ""),
+              risk: String(item.risk ?? ""),
+              relation: item.relation ? String(item.relation) : null,
+            }))
+            .filter((item) => !isDerivativeIdea(item.name))
+            .filter((item) => !isCommonIdea(item.name, item.ticker))
+        : []
+
+      const filled = [...aiList]
+      if (filled.length < 3) {
+        for (const candidate of buildFallbackIdeas(context)) {
+          if (filled.find((item) => item.ticker === candidate.ticker || item.name === candidate.name)) {
+            continue
+          }
+          filled.push(candidate)
+          if (filled.length >= 5) {
+            break
+          }
+        }
+      }
+
+      return filled.slice(0, 5)
+    })(),
     holdingsNotes: Array.isArray(payload.holdingsNotes)
       ? payload.holdingsNotes
           .filter((item) => item?.name)
@@ -246,7 +329,7 @@ export async function generateDailyMarketBrief(context: BriefContext): Promise<D
   }
 
   const raw = await callGemini(buildPrompt(context))
-  const brief = normalizeBrief(raw)
+  const brief = normalizeBrief(raw, context)
 
   briefCache.set(cacheKey, {
     brief,

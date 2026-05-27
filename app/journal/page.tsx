@@ -58,12 +58,12 @@ export default function JournalPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-6 sm:py-8">
-        <div className="mb-6 flex flex-col gap-4 sm:mb-8 lg:flex-row lg:items-center lg:justify-between">
+      <main className="container mx-auto px-4 py-6 space-y-6 sm:py-8 sm:space-y-7">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-foreground sm:text-3xl">매매 일지 목록</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {journals.length}개의 매매 기록
+              {journals.length}개의 매매 기록과 달력 복기를 한 번에 확인하세요.
             </p>
           </div>
           {session?.canWrite ? (
@@ -75,9 +75,9 @@ export default function JournalPage() {
             </Link>
           ) : null}
         </div>
-        <div className="mb-6 sm:mb-8">
-          <JournalCalendar journals={journals} />
-        </div>
+
+        <JournalCalendar journals={journals} />
+
         <JournalTable journals={journals} canWrite={session?.canWrite ?? false} />
       </main>
     </div>

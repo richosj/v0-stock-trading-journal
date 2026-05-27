@@ -14,6 +14,8 @@ export function Header() {
 
   const navItems = [
     { href: "/dashboard", label: "대시보드" },
+    { href: "/market", label: "오늘 시장" },
+    { href: "/insights", label: "복기 인사이트" },
     { href: "/journal", label: "매매 일지" },
     ...(session?.canWrite ? [{ href: "/create", label: "새 일지" }] : []),
   ];

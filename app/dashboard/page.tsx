@@ -3,7 +3,6 @@
 import { Header } from '@/components/trading/header'
 import { OverviewCards } from '@/components/trading/overview-cards'
 import { LivePricePanel } from '@/components/trading/live-price-panel'
-import { DashboardInsights } from '@/components/trading/dashboard-insights'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchAllJournals, getJournalStats } from '@/lib/trading-service'
 import type { TradingJournal } from '@/lib/supabase'
@@ -158,16 +157,25 @@ export default function DashboardPage() {
           onRefresh={() => loadQuotes(openPositions)}
         />
 
-        <DashboardInsights journals={journals} quotes={quotes} />
-
         {/* Quick Links */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Link
+            href="/insights"
+            className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
+          >
+            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+              복기 인사이트
+            </h3>
+            <p className="text-sm text-muted-foreground mt-2">
+              월별 흐름, 전략 성과, 실수 패턴을 별도 화면에서 집중해서 확인하세요.
+            </p>
+          </Link>
           <Link
             href="/journal"
             className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
           >
             <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-              📊 매매 일지 목록
+              매매 일지 목록
             </h3>
             <p className="text-sm text-muted-foreground mt-2">
               모든 매매 일지를 확인하고 관리하세요.
@@ -179,7 +187,7 @@ export default function DashboardPage() {
               className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
             >
               <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                ✏️ 새 일지 작성
+                새 일지 작성
               </h3>
               <p className="text-sm text-muted-foreground mt-2">
                 오늘의 매매를 기록하세요.
@@ -187,7 +195,7 @@ export default function DashboardPage() {
             </Link>
           ) : (
             <div className="p-6 rounded-xl border border-border bg-card">
-              <h3 className="font-semibold text-foreground">👀 조회 전용 모드</h3>
+              <h3 className="font-semibold text-foreground">조회 전용 모드</h3>
               <p className="text-sm text-muted-foreground mt-2">
                 마스터 계정은 전체 기록과 포트폴리오 현황을 확인할 수 있습니다.
               </p>

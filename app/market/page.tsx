@@ -35,6 +35,15 @@ export default function MarketPage() {
                   썸네일 뉴스 24건+ · 한줄 해석 · 보유 종목 연관 기사까지 확인합니다.
                 </p>
               </Link>
+              <Link
+                href="/market/crypto"
+                className="group relative overflow-hidden rounded-2xl border border-warning/20 bg-gradient-to-br from-warning/10 to-card p-6 transition-all hover:shadow-lg sm:col-span-2"
+              >
+                <p className="text-lg font-bold text-foreground">코인 뉴스 →</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  CoinDesk · Cointelegraph에서 코인 기사만 모아서 최신순으로 보여줍니다.
+                </p>
+              </Link>
             </div>
           </div>
         </section>

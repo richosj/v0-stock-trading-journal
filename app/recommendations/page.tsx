@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { Header } from '@/components/trading/header'
 import { AiMarketBrief } from '@/components/trading/ai-market-brief'
 import type { DailyAiBrief } from '@/lib/gemini-brief-types'
-import { Bot, Briefcase, Sparkles, Target, TrendingUp } from 'lucide-react'
+import { Bot, Briefcase, Target, TrendingUp } from 'lucide-react'
+import { PageHero } from '@/components/trading/page-hero'
 
 export default function RecommendationsPage() {
   const [brief, setBrief] = useState<DailyAiBrief | null>(null)
@@ -39,22 +40,11 @@ export default function RecommendationsPage() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto space-y-6 px-4 py-6 sm:space-y-8 sm:py-8">
-        <section className="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/15 via-card to-card p-6 shadow-md">
-          <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-primary/15 blur-3xl" />
-          <div className="absolute -bottom-16 -left-16 h-40 w-40 rounded-full bg-profit/10 blur-2xl" />
-          <div className="relative">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              AI + 내 일지 기반
-            </div>
-            <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              추천 종목
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              뻔한 대형주는 줄이고, 오늘 시장 흐름과 내 매매 기록을 반영해 카드로 정리합니다.
-              보유 종목이 많으면 슬라이드로 넘겨 확인하세요.
-            </p>
-
+        <PageHero
+          badge="AI + 내 일지 기반"
+          title="추천 종목"
+          description="뻔한 대형주는 줄이고, 오늘 시장 흐름과 내 매매 기록을 반영한 추천을 카드로 확인하세요."
+          stats={
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="flex items-center gap-2.5 rounded-xl border border-border/80 bg-background/70 px-3 py-3 backdrop-blur-sm">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
@@ -107,8 +97,8 @@ export default function RecommendationsPage() {
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          }
+        />
 
         <AiMarketBrief brief={brief} loading={loading} error={error} onRefresh={loadBrief} />
       </main>

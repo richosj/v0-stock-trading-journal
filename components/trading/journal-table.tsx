@@ -1,7 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpDown, Search, Filter, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowUpDown,
+  Search,
+  Filter,
+  Pencil,
+  Trash2,
+  CalendarClock,
+  CircleDollarSign,
+  BadgeCheck,
+  AlertTriangle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TradingJournal } from "@/lib/supabase";
 import { deleteJournal } from "@/lib/trading-service";
@@ -83,9 +93,9 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
         {/* Table header controls */}
-        <div className="px-4 py-4 sm:px-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 border-b border-border">
+        <div className="px-4 py-4 sm:px-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 border-b border-border bg-background/60">
           <div className="flex items-center gap-3">
             <h2 className="font-semibold text-foreground">매매 일지</h2>
             <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
@@ -101,7 +111,7 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                 placeholder="종목명 검색..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-border bg-secondary/60 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full pl-8 pr-3 py-2 rounded-xl border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
             {/* Filter */}
@@ -146,7 +156,14 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                   <Link
                     key={journal.id}
                     href={`/journal/${journal.id}`}
-                    className="rounded-xl border border-border bg-background p-4 transition-colors hover:bg-secondary/30"
+                    className={cn(
+                      "rounded-2xl border bg-background p-4 transition-all hover:shadow-sm",
+                      hasRealizedResult
+                        ? isProfitable
+                          ? "border-profit/30 hover:bg-profit/5"
+                          : "border-loss/30 hover:bg-loss/5"
+                        : "border-border hover:bg-secondary/20"
+                    )}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -223,16 +240,28 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                         )}
                       </div>
 
-                      {canWrite ? (
-                        <button
-                          onClick={(e) => handleDelete(e, journal.id)}
-                          disabled={deletingId === journal.id}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-loss/10 hover:text-loss disabled:opacity-40"
-                          title="삭제"
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            journal.is_principle
+                              ? "bg-profit-muted text-profit"
+                              : "bg-loss-muted text-loss"
+                          )}
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      ) : null}
+                          {journal.is_principle ? "원칙" : "뇌동"}
+                        </span>
+                        {canWrite ? (
+                          <button
+                            onClick={(e) => handleDelete(e, journal.id)}
+                            disabled={deletingId === journal.id}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-loss/10 hover:text-loss disabled:opacity-40"
+                            title="삭제"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </Link>
                 );
@@ -242,7 +271,7 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
             <div className="hidden overflow-x-auto sm:block">
               <table className="w-full min-w-[860px] text-sm">
                 <thead>
-                  <tr className="border-b border-border">
+                  <tr className="border-b border-border bg-background/60">
                     <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground">
                       종목명
                     </th>
@@ -292,7 +321,14 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                     return (
                       <tr
                         key={journal.id}
-                        className="border-b border-border/50 hover:bg-secondary/30 transition-colors group"
+                        className={cn(
+                          "border-b border-border/50 transition-colors group",
+                          hasRealizedResult
+                            ? isProfitable
+                              ? "hover:bg-profit/5"
+                              : "hover:bg-loss/5"
+                            : "hover:bg-secondary/20"
+                        )}
                       >
                         <td className="px-6 py-4">
                           <Link href={`/journal/${journal.id}`} className="block hover:opacity-80">
@@ -312,6 +348,12 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                         <td className="px-3 py-4 text-right font-mono text-sm text-foreground">
                           {formatCurrency(journal.entry_price)}
                         </td>
+                        <td className="px-3 py-4 text-right">
+                          <span className="inline-flex items-center gap-1 font-mono text-sm text-foreground">
+                            <CircleDollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                            {formatCurrency(journal.entry_price)}
+                          </span>
+                        </td>
                         <td className="px-3 py-4 text-right font-mono text-sm text-foreground">
                           {formatQuantity(journal.quantity)}
                         </td>
@@ -321,14 +363,21 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                           </span>
                         </td>
                         <td className="px-3 py-4 text-xs font-mono text-muted-foreground">
-                          {new Date(journal.trade_date).toLocaleDateString("ko-KR")}
+                          <span className="inline-flex items-center gap-1">
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            {new Date(journal.trade_date).toLocaleDateString("ko-KR")}
+                          </span>
                         </td>
                         <td className="px-3 py-4 text-right">
                           <div>
                             <p
                               className={cn(
                                 "font-mono font-semibold text-sm",
-                                isProfitable ? "text-profit" : "text-loss"
+                                hasRealizedResult
+                                  ? isProfitable
+                                    ? "text-profit"
+                                    : "text-loss"
+                                  : "text-muted-foreground"
                               )}
                             >
                               {hasRealizedResult
@@ -345,12 +394,17 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                         <td className="px-3 py-4">
                           <span
                             className={cn(
-                              "px-2 py-0.5 rounded-full text-xs font-medium",
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
                               journal.is_principle
                                 ? "bg-profit-muted text-profit"
                                 : "bg-loss-muted text-loss"
                             )}
                           >
+                            {journal.is_principle ? (
+                              <BadgeCheck className="h-3 w-3" />
+                            ) : (
+                              <AlertTriangle className="h-3 w-3" />
+                            )}
                             {journal.is_principle ? "원칙매매" : "뇌동매매"}
                           </span>
                         </td>

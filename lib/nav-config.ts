@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  Activity,
   BookOpen,
   Globe,
   LayoutDashboard,
@@ -19,6 +20,7 @@ export type NavItem = {
 
 export const PRIMARY_NAV: NavItem[] = [
   { href: "/dashboard", label: "대시보드", shortLabel: "홈", icon: LayoutDashboard, mobileTab: true },
+  { href: "/holdings", label: "실시간 보유", shortLabel: "보유", icon: Activity },
   { href: "/market/kr", label: "오늘의 국장", shortLabel: "국장", icon: TrendingUp, mobileTab: true },
   { href: "/market/us", label: "오늘의 미장", shortLabel: "미장", icon: Globe, mobileTab: true },
   { href: "/journal", label: "매매 일지", shortLabel: "일지", icon: BookOpen, mobileTab: true },

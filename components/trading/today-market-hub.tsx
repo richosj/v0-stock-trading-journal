@@ -333,6 +333,24 @@ export function UsMarketHub({
             <span className="rounded-full bg-secondary px-3 py-1">헤드라인 + 보유 연관</span>
           </div>
         </div>
+
+        <div className="relative mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/60 bg-background/65 p-4">
+            <p className="text-xs text-muted-foreground">전체 헤드라인</p>
+            <p className="mt-1 text-xl font-bold text-foreground">{headlines.length}건</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">최신 미장 뉴스 모음</p>
+          </div>
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+            <p className="text-xs text-muted-foreground">보유 종목 연관</p>
+            <p className="mt-1 text-xl font-bold text-primary">{relatedNews.length}건</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">내 포지션과 연결된 기사</p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-background/65 p-4">
+            <p className="text-xs text-muted-foreground">읽기 난이도</p>
+            <p className="mt-1 text-xl font-bold text-foreground">요약 중심</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">이미지보다 해석 텍스트 우선</p>
+          </div>
+        </div>
       </section>
 
       <MarketNewsFeed

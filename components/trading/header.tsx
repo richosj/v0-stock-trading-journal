@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type ComponentType } from "react"
-import { BookOpen, LogOut, Menu } from "lucide-react"
+import { BookOpen, LogOut, Menu, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -59,23 +59,29 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-14 items-center justify-between gap-3">
             <Link
               href="/dashboard"
               className="flex min-w-0 items-center gap-2.5 hover:opacity-80 transition-opacity"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 shadow-sm">
                 <BookOpen className="h-4 w-4 text-primary-foreground" />
               </div>
               <div className="min-w-0">
                 <span className="block truncate text-sm font-bold text-foreground sm:text-base">
                   매매 복기 일지
                 </span>
-                <span className="block truncate text-[11px] text-muted-foreground sm:hidden">
-                  {session?.label ?? "미인증"}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {session?.label ?? "미인증"}
+                  </span>
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    TRADE OS
+                  </span>
+                </div>
               </div>
             </Link>
 
@@ -91,8 +97,8 @@ export function Header() {
                   className={cn(
                     "whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors xl:px-3",
                     isNavActive(pathname, item.href)
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
                   )}
                 >
                   {item.label}
@@ -121,7 +127,7 @@ export function Header() {
               </button>
 
               <div
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-primary/15"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-primary/15 shadow-sm"
                 title={session?.label ?? ""}
               >
                 <span className="text-xs font-bold text-primary">
@@ -143,8 +149,8 @@ export function Header() {
                 className={cn(
                   "rounded-lg px-2 py-2 text-center text-xs font-medium transition-colors",
                   isNavActive(pathname, item.href)
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-secondary/60"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-secondary/70"
                 )}
               >
                 {item.shortLabel ?? item.label}

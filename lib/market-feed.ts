@@ -35,9 +35,9 @@ type UsHolding = {
 
 const NAVER_BASE_URL = "https://finance.naver.com"
 const INVESTING_RSS_FEEDS = [
-  "https://www.investing.com/rss/news.rss",
-  "https://www.investing.com/rss/news_25.rss",
-  "https://www.investing.com/rss/news_301.rss",
+  "https://kr.investing.com/rss/news.rss",
+  "https://kr.investing.com/rss/news_25.rss",
+  "https://kr.investing.com/rss/news_301.rss",
 ]
 const REMOTE_TIMEOUT_MS = 10000
 const MARKET_ITEM_LIMIT = 10
@@ -254,12 +254,17 @@ function parseRssItems(xml: string, holdings: UsHolding[]) {
 
     const related = resolveRelatedHolding(title, holdings)
 
+    const normalizedUrl = url.replace("http://", "https://")
+    if (!normalizedUrl.includes("kr.investing.com")) {
+      continue
+    }
+
     items.push({
       title,
       koreanSummary: buildKoreanNewsHint(title),
       author: author || null,
       publishedAt: publishedAt || null,
-      url,
+      url: normalizedUrl,
       imageUrl,
       relatedTicker: related.relatedTicker,
       relatedLabel: related.relatedLabel,
@@ -321,7 +326,26 @@ async function fetchInvestingRssFeed(feedUrl: string) {
     return ""
   }
 
-  return response.text()
+  const buffer = await response.arrayBuffer()
+  return decodeInvestingRss(buffer)
+}
+
+function decodeInvestingRss(buffer: ArrayBuffer) {
+  const utf8 = new TextDecoder("utf-8").decode(buffer)
+  const hasBrokenUnicode = utf8.includes("���")
+
+  if (!hasBrokenUnicode) {
+    return utf8
+  }
+
+  try {
+    const eucKr = new TextDecoder("euc-kr").decode(buffer)
+    const eucKrHangulScore = (eucKr.match(/[가-힣]/g) ?? []).length
+    const utf8HangulScore = (utf8.match(/[가-힣]/g) ?? []).length
+    return eucKrHangulScore >= utf8HangulScore ? eucKr : utf8
+  } catch {
+    return utf8
+  }
 }
 
 export async function fetchUsMarketNews(holdings: UsHolding[]) {

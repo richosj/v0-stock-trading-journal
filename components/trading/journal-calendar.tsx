@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, CircleDollarSign, Target } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { TradingJournal } from "@/lib/supabase";
@@ -236,7 +236,7 @@ export function JournalCalendar({ journals }: JournalCalendarProps) {
       </div>
 
       {selectedDateKey ? (
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-foreground">
@@ -271,7 +271,14 @@ export function JournalCalendar({ journals }: JournalCalendarProps) {
                 <Link
                   key={journal.id}
                   href={`/journal/${journal.id}`}
-                  className="block rounded-xl border border-border bg-background px-4 py-3 transition-colors hover:bg-secondary/30"
+                  className={cn(
+                    "block rounded-xl border bg-background px-4 py-3 transition-all hover:shadow-sm",
+                    journal.pnl_percent == null
+                      ? "border-border hover:bg-secondary/30"
+                      : (journal.pnl_percent ?? 0) >= 0
+                        ? "border-profit/30 hover:bg-profit/5"
+                        : "border-loss/30 hover:bg-loss/5"
+                  )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -281,12 +288,27 @@ export function JournalCalendar({ journals }: JournalCalendarProps) {
                       <p className="mt-1 text-xs font-mono text-muted-foreground">
                         {journal.ticker || "티커 미입력"}
                       </p>
+                      <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <CalendarClock className="h-3 w-3" />
+                        {new Date(journal.trade_date).toLocaleDateString("ko-KR")}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-foreground">
+                      <p className="inline-flex items-center gap-1 text-sm font-semibold text-foreground">
+                        <CircleDollarSign className="h-3.5 w-3.5 text-muted-foreground" />
                         {formatCurrency(journal.entry_price)}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p
+                        className={cn(
+                          "mt-1 inline-flex items-center gap-1 text-xs font-medium",
+                          journal.pnl_percent == null
+                            ? "text-muted-foreground"
+                            : (journal.pnl_percent ?? 0) >= 0
+                              ? "text-profit"
+                              : "text-loss"
+                        )}
+                      >
+                        <Target className="h-3 w-3" />
                         {journal.pnl_percent != null
                           ? formatSignedPercent(journal.pnl_percent, 2)
                           : "진행 중"}

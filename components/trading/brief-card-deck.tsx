@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/carousel"
 import { cn } from "@/lib/utils"
 
-const GRID_MAX = 4
-const PAGE_SIZE = 8
+const GRID_MAX = 5
+const PAGE_SIZE = 10
 
 function chunk<T>(items: T[], size: number): T[][] {
   const pages: T[][] = []
@@ -74,7 +74,7 @@ export function BriefCardDeck<T>({
       ) : null}
 
       {useCompactGrid ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {items.map((item, i) => (
             <div key={getKey(item, i)}>{renderCard(item, i)}</div>
           ))}
@@ -90,7 +90,7 @@ export function BriefCardDeck<T>({
             <CarouselContent className="-ml-3">
               {pages.map((page, pageIndex) => (
                 <CarouselItem key={`page-${pageIndex}`} className="pl-3 basis-full">
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                     {page.map((item, i) => {
                       const globalIndex = pageIndex * PAGE_SIZE + i
                       return (

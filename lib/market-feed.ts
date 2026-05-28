@@ -17,6 +17,20 @@ export type KoreaMarketSnapshot = {
   fetchedAt: string
 }
 
+export type KoreaStockFundamental = {
+  code: string
+  prevClose: string | null
+  open: string | null
+  high: string | null
+  low: string | null
+  volume: string | null
+  value: string | null
+  marketCap: string | null
+  per: string | null
+  pbr: string | null
+  eps: string | null
+}
+
 export type UsNewsItem = {
   title: string
   koreanSummary: string
@@ -107,7 +121,26 @@ async function fetchEucKrHtml(url: string) {
     throw new Error(`시장 페이지 조회 실패: ${response.status}`)
   }
 
-  return new TextDecoder("euc-kr").decode(await response.arrayBuffer())
+  const buffer = await response.arrayBuffer()
+  const contentType = (response.headers.get("content-type") ?? "").toLowerCase()
+  const utf8 = new TextDecoder("utf-8").decode(buffer)
+
+  if (contentType.includes("utf-8")) {
+    return utf8
+  }
+
+  const eucKr = new TextDecoder("euc-kr").decode(buffer)
+  if (contentType.includes("euc-kr")) {
+    return eucKr
+  }
+
+  const score = (text: string) => {
+    const hangul = (text.match(/[가-힣]/g) ?? []).length
+    const broken = (text.match(/�/g) ?? []).length
+    return hangul - broken * 3
+  }
+
+  return score(utf8) >= score(eucKr) ? utf8 : eucKr
 }
 
 function parseNaverTable(html: string) {
@@ -178,6 +211,90 @@ function decodeXmlText(value: string) {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .trim()
+}
+
+function normalizeCellLabel(label: string) {
+  return label
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\s+/g, "")
+    .trim()
+}
+
+function buildCellMap(html: string) {
+  const fieldMap = new Map<string, string>()
+
+  for (const row of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const rowHtml = row[1]
+    const headers = [...rowHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)].map((m) =>
+      normalizeCellLabel(stripHtml(m[1]))
+    )
+    const cells = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) =>
+      stripHtml(m[1]).replace(/\s+/g, " ").trim()
+    )
+
+    const pairCount = Math.min(headers.length, cells.length)
+    for (let i = 0; i < pairCount; i += 1) {
+      const header = headers[i]
+      const value = cells[i]
+      if (!header || !value) continue
+      if (!fieldMap.has(header)) {
+        fieldMap.set(header, value)
+      }
+    }
+  }
+
+  return fieldMap
+}
+
+function extractCellValue(cellMap: Map<string, string>, labels: string[]) {
+  for (const label of labels) {
+    const normalized = normalizeCellLabel(label)
+    if (!normalized) continue
+
+    for (const [key, value] of cellMap.entries()) {
+      if (!key) continue
+      if (key === normalized || key.includes(normalized) || normalized.includes(key)) {
+        return value
+      }
+    }
+  }
+  return null
+}
+
+async function fetchKoreaStockFundamental(code: string): Promise<KoreaStockFundamental | null> {
+  if (!/^\d{5,6}$/.test(code)) return null
+  const html = await fetchEucKrHtml(`${NAVER_BASE_URL}/item/main.naver?code=${code}`)
+  const cellMap = buildCellMap(html)
+  return {
+    code,
+    prevClose: extractCellValue(cellMap, ["전일", "전일가"]),
+    open: extractCellValue(cellMap, ["시가", "시작"]),
+    high: extractCellValue(cellMap, ["고가"]),
+    low: extractCellValue(cellMap, ["저가"]),
+    volume: extractCellValue(cellMap, ["거래량"]),
+    value: extractCellValue(cellMap, ["거래대금", "대금"]),
+    marketCap: extractCellValue(cellMap, ["시가총액", "시총"]),
+    per: extractCellValue(cellMap, ["PER"]),
+    pbr: extractCellValue(cellMap, ["PBR"]),
+    eps: extractCellValue(cellMap, ["EPS"]),
+  }
+}
+
+async function fetchKoreaStockMarketCapFallback(code: string): Promise<string | null> {
+  if (!/^\d{5,6}$/.test(code)) return null
+
+  try {
+    const html = await fetchEucKrHtml(`${NAVER_BASE_URL}/item/sise.naver?code=${code}`)
+    const rowMatch = html.match(
+      /<th[^>]*class="title"[^>]*>\s*시가총액\s*<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/i
+    )
+    if (!rowMatch?.[1]) return null
+
+    const value = stripHtml(rowMatch[1]).replace(/\s+/g, " ").trim()
+    return value || null
+  } catch {
+    return null
+  }
 }
 
 function buildKoreanNewsHint(title: string) {
@@ -368,6 +485,30 @@ export async function fetchUsMarketNews(holdings: UsHolding[]) {
       .slice(0, RELATED_NEWS_LIMIT),
     fetchedAt: new Date().toISOString(),
   }
+}
+
+export async function fetchKoreaStockFundamentals(codes: string[]) {
+  const unique = [...new Set(codes.filter((code) => /^\d{5,6}$/.test(code)))]
+  const rows = await Promise.all(
+    unique.map(async (code) => {
+      try {
+        return await fetchKoreaStockFundamental(code)
+      } catch {
+        return null
+      }
+    })
+  )
+  const withFallback = await Promise.all(
+    rows.map(async (row) => {
+      if (!row) return null
+      if (row.marketCap) return row
+
+      const fallbackMarketCap = await fetchKoreaStockMarketCapFallback(row.code)
+      if (!fallbackMarketCap) return row
+      return { ...row, marketCap: fallbackMarketCap }
+    })
+  )
+  return withFallback.filter((row): row is KoreaStockFundamental => Boolean(row))
 }
 
 export function getNaverStockLogoUrl(code: string) {

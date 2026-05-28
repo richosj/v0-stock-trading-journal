@@ -4,6 +4,8 @@ import {
   type LiveQuote,
   type QuoteRequestPosition,
 } from '@/lib/market-quotes'
+import { requireAuthSession } from '@/lib/auth/server'
+import { handleRouteError } from '@/lib/route-response'
 
 type YahooChartMeta = {
   currency?: string
@@ -99,6 +101,7 @@ async function resolveLiveQuote(position: QuoteRequestPosition): Promise<LiveQuo
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuthSession()
     const body = await request.json()
     const positions = Array.isArray(body?.positions)
       ? (body.positions as QuoteRequestPosition[])
@@ -108,9 +111,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ quotes })
   } catch (error) {
-    return NextResponse.json(
-      { error: '실시간 시세를 불러오지 못했습니다.' },
-      { status: 500 }
-    )
+    return handleRouteError(error)
   }
 }

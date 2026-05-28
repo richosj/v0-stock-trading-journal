@@ -1,151 +1,115 @@
-import { getSupabase, type TradingJournal, type NewTradingJournal } from './supabase'
-import {
-  buildJournalPayload,
-  buildJournalUpdatePayload,
-  normalizeJournal,
-} from './trading-calculations'
+import type {
+  NewTradingJournal,
+  NewTradingJournalFill,
+  TradingJournal,
+  TradingJournalFill,
+} from './supabase'
 
-export async function fetchAllJournals(): Promise<TradingJournal[]> {
-  const supabase = getSupabase()
-  const { data, error } = await supabase
-    .from('trading_journals')
-    .select('*')
-    .order('trade_date', { ascending: false })
+async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+    cache: 'no-store',
+  })
 
-  if (error) {
-    console.error('Error fetching journals:', error)
-    return []
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    throw new Error(payload?.error || '요청 처리에 실패했습니다.')
   }
 
-  return (data || []).map(normalizeJournal)
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return response.json()
+}
+
+export async function fetchAllJournals(): Promise<TradingJournal[]> {
+  const payload = await requestJson<{ journals: TradingJournal[] }>('/api/journals')
+  return payload.journals
 }
 
 export async function fetchJournalById(id: string): Promise<TradingJournal | null> {
-  const supabase = getSupabase()
-  const { data, error } = await supabase
-    .from('trading_journals')
-    .select('*')
-    .eq('id', id)
-    .single()
-
-  if (error) {
-    console.error('Error fetching journal:', error)
-    return null
-  }
-
-  return data ? normalizeJournal(data) : null
+  const payload = await requestJson<{ journal: TradingJournal }>(`/api/journals/${id}`)
+  return payload.journal
 }
 
-export async function createJournal(
-  journal: NewTradingJournal
-): Promise<TradingJournal | null> {
-  const supabase = getSupabase()
-  const payload = buildJournalPayload(journal)
-  const { data, error } = await supabase
-    .from('trading_journals')
-    .insert([payload])
-    .select()
-    .single()
+export async function createJournal(journal: NewTradingJournal): Promise<TradingJournal | null> {
+  const payload = await requestJson<{ journal: TradingJournal }>('/api/journals', {
+    method: 'POST',
+    body: JSON.stringify(journal),
+  })
 
-  if (error) {
-    console.error('Error creating journal:', error)
-    return null
-  }
-
-  return data ? normalizeJournal(data) : null
+  return payload.journal
 }
 
 export async function updateJournal(
   id: string,
   updates: Partial<NewTradingJournal>
 ): Promise<TradingJournal | null> {
-  const supabase = getSupabase()
-  const { data: currentJournal, error: fetchError } = await supabase
-    .from('trading_journals')
-    .select('*')
-    .eq('id', id)
-    .single()
+  const payload = await requestJson<{ journal: TradingJournal }>(`/api/journals/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
 
-  if (fetchError || !currentJournal) {
-    console.error('Error fetching journal for update:', fetchError)
-    return null
-  }
-
-  const payload = buildJournalUpdatePayload(normalizeJournal(currentJournal), updates)
-  const { data, error } = await supabase
-    .from('trading_journals')
-    .update(payload)
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating journal:', error)
-    return null
-  }
-
-  return data ? normalizeJournal(data) : null
+  return payload.journal
 }
 
 export async function deleteJournal(id: string): Promise<boolean> {
-  const supabase = getSupabase()
-  const { error } = await supabase
-    .from('trading_journals')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    console.error('Error deleting journal:', error)
-    return false
-  }
-
+  await requestJson<{ success: boolean }>(`/api/journals/${id}`, {
+    method: 'DELETE',
+  })
   return true
 }
 
+export async function fetchJournalFills(journalId: string): Promise<TradingJournalFill[]> {
+  const payload = await requestJson<{ fills: TradingJournalFill[] }>(
+    `/api/journals/${journalId}/fills`
+  )
+  return payload.fills
+}
+
+export async function createJournalFill(
+  fill: NewTradingJournalFill
+): Promise<TradingJournal | null> {
+  const payload = await requestJson<{ journal: TradingJournal }>(
+    `/api/journals/${fill.journal_id}/fills`,
+    {
+      method: 'POST',
+      body: JSON.stringify(fill),
+    }
+  )
+
+  return payload.journal
+}
+
+export async function deleteJournalFill(
+  journalId: string,
+  fillId: string
+): Promise<TradingJournal | null> {
+  const payload = await requestJson<{ journal: TradingJournal }>(
+    `/api/journals/${journalId}/fills/${fillId}`,
+    {
+      method: 'DELETE',
+    }
+  )
+
+  return payload.journal
+}
+
 export async function getJournalStats() {
-  try {
-    const journals = await fetchAllJournals()
-
-    if (journals.length === 0) {
-      return {
-        totalPnL: 0,
-        totalPnLPercent: 0,
-        winRate: 0,
-        principleRate: 0,
-        openPositions: 0,
-      }
+  const payload = await requestJson<{
+    stats: {
+      totalPnL: number
+      totalPnLPercent: number
+      winRate: number
+      principleRate: number
+      openPositions: number
     }
+  }>('/api/stats')
 
-    const closedJournals = journals.filter(
-      (j) => j.status === 'closed' && j.pnl != null && j.pnl_percent != null
-    )
-    const wins = closedJournals.filter((j) => (j.pnl || 0) > 0).length
-    const winRate = closedJournals.length > 0 ? (wins / closedJournals.length) * 100 : 0
-    const principleJournals = journals.filter((j) => j.is_principle).length
-    const principleRate =
-      journals.length > 0 ? (principleJournals / journals.length) * 100 : 0
-
-    const totalPnL = closedJournals.reduce((sum, j) => sum + (j.pnl || 0), 0)
-    const totalClosedCost = closedJournals.reduce(
-      (sum, journal) => sum + journal.entry_price * journal.quantity,
-      0
-    )
-
-    return {
-      totalPnL,
-      totalPnLPercent: totalClosedCost > 0 ? (totalPnL / totalClosedCost) * 100 : 0,
-      winRate,
-      principleRate,
-      openPositions: journals.filter((j) => j.status === 'open').length,
-    }
-  } catch (error) {
-    console.error('Error getting journal stats:', error)
-    return {
-      totalPnL: 0,
-      totalPnLPercent: 0,
-      winRate: 0,
-      principleRate: 0,
-      openPositions: 0,
-    }
-  }
+  return payload.stats
 }

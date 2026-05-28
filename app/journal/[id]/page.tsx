@@ -4,15 +4,22 @@ import { Header } from '@/components/trading/header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useEffect, useState } from 'react'
-import { fetchJournalById, updateJournal, deleteJournal } from '@/lib/trading-service'
-import { TradingJournal } from '@/lib/supabase'
+import {
+  fetchJournalById,
+  updateJournal,
+  deleteJournal,
+  fetchJournalFills,
+  createJournalFill,
+  deleteJournalFill,
+} from '@/lib/trading-service'
+import type { TradingJournal, TradingJournalFill } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Pencil, Trash2, Save, X } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Save, X, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import {
-  calculateJournalMetrics,
+  calculateAverageCostRollup,
   formatCurrency,
   formatNumericInput,
   formatQuantity,
@@ -21,54 +28,82 @@ import {
   sanitizeDecimalInput,
   sanitizeIntegerInput,
 } from '@/lib/trading-calculations'
+import { useAuth } from '@/components/auth-provider'
+import { getOwnerLabel } from '@/lib/auth/shared'
+import { JournalStyleEditor } from '@/components/trading/journal-style-editor'
+import { JournalStyleBadge } from '@/components/trading/journal-style-badge'
+import {
+  inferTradeStyleFromStrategy,
+  type JournalTemplatePatch,
+  type JournalTradeStyle,
+} from '@/lib/journal-templates'
 
 export default function JournalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
+  const { session } = useAuth()
   const [journal, setJournal] = useState<TradingJournal | null>(null)
+  const [fills, setFills] = useState<TradingJournalFill[]>([])
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [editData, setEditData] = useState<Partial<TradingJournal>>({})
   const [saving, setSaving] = useState(false)
+  const [fillMode, setFillMode] = useState<'buy' | 'sell' | null>(null)
+  const [fillPrice, setFillPrice] = useState('')
+  const [fillQuantity, setFillQuantity] = useState('')
+  const [fillDate, setFillDate] = useState(new Date().toISOString().slice(0, 10))
+  const [fillMemo, setFillMemo] = useState('')
+  const [fillSaving, setFillSaving] = useState(false)
+  const [deletingFillId, setDeletingFillId] = useState<string | null>(null)
+  const [editTradeStyle, setEditTradeStyle] = useState<JournalTradeStyle | null>(null)
+  const canWrite = session?.canWrite ?? false
+
+  const applyEditTemplatePatch = (patch: Partial<JournalTemplatePatch>) => {
+    setEditData((prev) => ({
+      ...prev,
+      ...(patch.reason != null ? { reason: patch.reason } : {}),
+      ...(patch.scenario_notes != null ? { scenario_notes: patch.scenario_notes } : {}),
+      ...(patch.principle_notes != null ? { principle_notes: patch.principle_notes } : {}),
+      ...(patch.is_principle != null ? { is_principle: patch.is_principle } : {}),
+      ...(patch.strategy != null ? { strategy: patch.strategy } : {}),
+      ...(patch.target_price != null ? { target_price: patch.target_price } : {}),
+      ...(patch.stop_loss != null ? { stop_loss: patch.stop_loss } : {}),
+    }))
+    if (patch.strategy) {
+      const inferred = inferTradeStyleFromStrategy(patch.strategy)
+      if (inferred) setEditTradeStyle(inferred)
+    }
+  }
 
   const updateEditData = (patch: Partial<TradingJournal>) => {
-    setEditData((prev) => {
-      if (!journal) {
-        return { ...prev, ...patch }
-      }
-
-      const next = { ...prev, ...patch }
-      const merged = { ...journal, ...next }
-
-      const metrics = calculateJournalMetrics({
-        entry_price: merged.entry_price,
-        quantity: merged.quantity,
-        exit_price: merged.exit_price,
-      })
-
-      return {
-        ...next,
-        exit_date:
-          merged.exit_price != null && merged.exit_price > 0
-            ? next.exit_date || merged.exit_date || new Date().toISOString().slice(0, 10)
-            : null,
-        pnl: metrics?.pnl ?? null,
-        pnl_percent: metrics?.pnl_percent ?? null,
-      }
-    })
+    setEditData((prev) => ({ ...prev, ...patch }))
   }
 
   const formatEditableNumber = (value: number | null | undefined) =>
     value == null ? '' : formatNumericInput(String(value))
 
+  const resetFillForm = () => {
+    setFillMode(null)
+    setFillPrice('')
+    setFillQuantity('')
+    setFillDate(new Date().toISOString().slice(0, 10))
+    setFillMemo('')
+  }
+
+  const loadJournalData = async () => {
+    const { id } = await params
+    const [journalData, fillData] = await Promise.all([
+      fetchJournalById(id),
+      fetchJournalFills(id),
+    ])
+    setJournal(journalData)
+    setFills(fillData)
+  }
+
   useEffect(() => {
     const loadJournal = async () => {
       setLoading(true)
       try {
-        const { id } = await params
-        console.log('[v0] Loading journal id:', id)
-        const data = await fetchJournalById(id)
-        console.log('[v0] Journal data:', data)
-        setJournal(data)
+        await loadJournalData()
       } catch (err: any) {
         console.error('[v0] Detail load error:', err)
       } finally {
@@ -80,22 +115,21 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   }, [params])
 
   const startEdit = () => {
+    if (!canWrite) return
     if (journal) {
       setEditData({
         company_name: journal.company_name,
         ticker: journal.ticker,
-        entry_price: journal.entry_price,
-        quantity: journal.quantity,
         target_price: journal.target_price,
         stop_loss: journal.stop_loss,
         trade_date: journal.trade_date,
         reason: journal.reason,
         is_principle: journal.is_principle,
-        exit_price: journal.exit_price,
-        exit_date: journal.exit_date,
-        pnl: journal.pnl,
-        pnl_percent: journal.pnl_percent,
+        scenario_notes: journal.scenario_notes,
+        principle_notes: journal.principle_notes,
+        strategy: journal.strategy,
       })
+      setEditTradeStyle(inferTradeStyleFromStrategy(journal.strategy))
       setIsEditing(true)
     }
   }
@@ -103,9 +137,11 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   const cancelEdit = () => {
     setIsEditing(false)
     setEditData({})
+    setEditTradeStyle(null)
   }
 
   const handleSave = async () => {
+    if (!canWrite) return
     if (!journal) return
     setSaving(true)
     try {
@@ -113,6 +149,8 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
       if (result) {
         setJournal(result)
         setIsEditing(false)
+        setEditData({})
+        setEditTradeStyle(null)
         toast.success('수정되었습니다.')
       } else {
         toast.error('수정에 실패했습니다.')
@@ -125,6 +163,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleDelete = async () => {
+    if (!canWrite) return
     if (!journal) return
     if (!confirm('정말 삭제하시겠습니까?')) return
     try {
@@ -137,6 +176,71 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch (err) {
       toast.error('오류가 발생했습니다.')
+    }
+  }
+
+  const handleAddFill = async () => {
+    if (!canWrite) return
+    if (!journal || !fillMode) return
+    const price = Number(fillPrice)
+    const quantity = Number(fillQuantity)
+
+    if (!price || !quantity || !fillDate) {
+      toast.error('체결 가격, 수량, 날짜를 입력해주세요.')
+      return
+    }
+
+    if (fillMode === 'sell' && quantity > remainingQuantity) {
+      toast.error('현재 보유 수량보다 많이 매도할 수 없습니다.')
+      return
+    }
+
+    setFillSaving(true)
+    try {
+      const result = await createJournalFill({
+        journal_id: journal.id,
+        fill_type: fillMode,
+        price,
+        quantity,
+        fill_date: fillDate,
+        memo: fillMemo.trim() || null,
+        sort_order: fills.filter((fill) => fill.fill_date === fillDate).length,
+      })
+
+      if (!result) {
+        toast.error('체결 추가에 실패했습니다.')
+        return
+      }
+
+      await loadJournalData()
+      resetFillForm()
+      toast.success(fillMode === 'buy' ? '추매가 기록되었습니다.' : '매도 체결이 기록되었습니다.')
+    } catch (error: any) {
+      toast.error(error?.message || '체결 추가 중 오류가 발생했습니다.')
+    } finally {
+      setFillSaving(false)
+    }
+  }
+
+  const handleDeleteFill = async (fillId: string) => {
+    if (!canWrite) return
+    if (!journal) return
+    if (!confirm('이 체결 내역을 삭제하시겠습니까?')) return
+
+    setDeletingFillId(fillId)
+    try {
+      const result = await deleteJournalFill(journal.id, fillId)
+      if (!result) {
+        toast.error('체결 삭제에 실패했습니다.')
+        return
+      }
+
+      await loadJournalData()
+      toast.success('체결 내역을 삭제했습니다.')
+    } catch (error: any) {
+      toast.error(error?.message || '체결 삭제 중 오류가 발생했습니다.')
+    } finally {
+      setDeletingFillId(null)
     }
   }
 
@@ -165,18 +269,45 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
     )
   }
 
-  const displayExitPrice = isEditing
-    ? editData.exit_price ?? null
-    : journal.exit_price ?? null
-  const pnl = isEditing ? editData.pnl ?? 0 : journal.pnl ?? 0
-  const pnlPercent = isEditing ? editData.pnl_percent ?? 0 : journal.pnl_percent ?? 0
-  const hasSellPrice = displayExitPrice != null && displayExitPrice > 0
-  const hasCalculatedMetrics =
-    hasSellPrice &&
-    (isEditing
-      ? editData.pnl != null && editData.pnl_percent != null
-      : journal.pnl != null && journal.pnl_percent != null)
-  const isProfit = pnl > 0
+  const rollup = calculateAverageCostRollup(fills)
+  const remainingQuantity = rollup.openQuantity
+  const averageEntryPrice = rollup.averageEntryPrice || journal.entry_price
+  const realizedPnl = rollup.realizedPnl
+  const realizedPercent = rollup.realizedPnlPercent
+  const isProfit = realizedPnl >= 0
+  const totalBoughtLabel = formatQuantity(rollup.totalBoughtQuantity)
+  const totalSoldLabel = formatQuantity(rollup.totalSoldQuantity)
+  const ownerLabel = getOwnerLabel(journal.owner_key)
+  let buyStep = 0
+  let sellStep = 0
+  let runningQuantity = 0
+  let runningCost = 0
+
+  const fillTimeline = fills.map((fill) => {
+    if (fill.fill_type === 'buy') {
+      buyStep += 1
+      runningQuantity += fill.quantity
+      runningCost += fill.price * fill.quantity
+    } else {
+      sellStep += 1
+      const quantityToSell = Math.min(fill.quantity, runningQuantity)
+      const averageCost = runningQuantity > 0 ? runningCost / runningQuantity : 0
+      runningQuantity -= quantityToSell
+      runningCost -= averageCost * quantityToSell
+      if (runningQuantity === 0) {
+        runningCost = 0
+      }
+    }
+
+    const averageCost = runningQuantity > 0 ? runningCost / runningQuantity : 0
+
+    return {
+      ...fill,
+      sequenceLabel: `${fill.fill_type === 'buy' ? `${buyStep}차 매수` : `${sellStep}차 매도`}`,
+      remainingQuantity: runningQuantity,
+      averageCost,
+    }
+  })
 
   return (
     <div className="min-h-screen bg-background">
@@ -190,7 +321,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
             </Button>
           </Link>
           <div className="flex gap-2">
-            {isEditing ? (
+            {isEditing && canWrite ? (
               <>
                 <Button variant="ghost" size="sm" onClick={cancelEdit} className="gap-2">
                   <X className="w-4 h-4" />
@@ -201,7 +332,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                   {saving ? '저장 중...' : '저장'}
                 </Button>
               </>
-            ) : (
+            ) : canWrite ? (
               <>
                 <Button variant="outline" size="sm" onClick={startEdit} className="gap-2">
                   <Pencil className="w-4 h-4" />
@@ -212,12 +343,42 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                   삭제
                 </Button>
               </>
+            ) : (
+              <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                마스터 계정은 조회만 가능합니다.
+              </div>
             )}
           </div>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">{journal.company_name}</h1>
+          <JournalStyleBadge strategy={journal.strategy} />
+          {isEditing ? (
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+              수정 중
+            </span>
+          ) : null}
+        </div>
+
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
           <div className="space-y-6">
+            {isEditing ? (
+              <Card className="border-primary/20 bg-card p-6">
+                <h2 className="mb-1 text-lg font-semibold text-foreground">매매 스타일 템플릿</h2>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  스윙·단타·배당을 다시 선택하면 이유·시나리오·태그·목표/손절을 덮어씁니다.
+                </p>
+                <JournalStyleEditor
+                  selectedStyle={editTradeStyle}
+                  onStyleChange={setEditTradeStyle}
+                  entryPrice={averageEntryPrice}
+                  existingStrategy={editData.strategy ?? journal.strategy}
+                  onApply={applyEditTemplatePatch}
+                />
+              </Card>
+            ) : null}
+
             <Card className="p-6 bg-card border-border">
               <h2 className="text-xl font-semibold text-foreground mb-4">기본 정보</h2>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -235,6 +396,10 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                   ) : (
                     <p className="mt-1 text-lg font-semibold text-foreground">{journal.company_name}</p>
                   )}
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">소유자</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">{ownerLabel}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">티커</p>
@@ -273,70 +438,27 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">매도일</p>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={editData.exit_date || ''}
-                      onChange={(e) => updateEditData({ exit_date: e.target.value || null })}
-                      title="매도일"
-                      aria-label="매도일"
-                      className="w-full mt-1 rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground [color-scheme:light]"
-                    />
-                  ) : (
-                    <p className="mt-1 text-lg font-semibold text-foreground">
-                      {journal.exit_date ? new Date(journal.exit_date).toLocaleDateString('ko-KR') : '-'}
-                    </p>
-                  )}
+                  <p className="mt-1 text-lg font-semibold text-foreground">
+                    {journal.exit_date ? new Date(journal.exit_date).toLocaleDateString('ko-KR') : '-'}
+                  </p>
                 </div>
               </div>
             </Card>
 
             <Card className="p-6 bg-card border-border">
-              <h2 className="text-xl font-semibold text-foreground mb-4">가격 정보</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">포지션 요약</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-sm text-muted-foreground">진입가</p>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={formatEditableNumber(editData.entry_price)}
-                      onChange={(e) =>
-                        updateEditData({
-                          entry_price: Number(sanitizeDecimalInput(e.target.value)) || 0,
-                        })
-                      }
-                      title="진입가"
-                      aria-label="진입가"
-                      className="w-full mt-1 rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-foreground"
-                    />
-                  ) : (
-                    <p className="mt-1 text-lg font-semibold text-foreground">
-                      {formatCurrency(journal.entry_price)}
-                    </p>
-                  )}
+                  <p className="text-sm text-muted-foreground">평균단가</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">
+                    {remainingQuantity > 0 ? formatCurrency(averageEntryPrice) : '-'}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">수량</p>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={formatEditableNumber(editData.quantity)}
-                      onChange={(e) =>
-                        updateEditData({
-                          quantity: Number(sanitizeIntegerInput(e.target.value)) || 0,
-                        })
-                      }
-                      title="수량"
-                      aria-label="수량"
-                      className="w-full mt-1 rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-foreground"
-                    />
-                  ) : (
-                    <p className="mt-1 text-lg font-semibold text-foreground">
-                      {formatQuantity(journal.quantity)}
-                    </p>
-                  )}
+                  <p className="text-sm text-muted-foreground">보유 수량</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">
+                    {formatQuantity(remainingQuantity)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">목표가</p>
@@ -383,87 +505,286 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                   )}
                 </div>
                 <div className="sm:col-span-2">
-                  <p className="text-sm text-muted-foreground">매도가</p>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={formatEditableNumber(editData.exit_price)}
-                      onChange={(e) => {
-                        const nextValue = sanitizeDecimalInput(e.target.value)
-                        updateEditData({
-                          exit_price: nextValue ? Number(nextValue) : null,
-                        })
-                      }}
-                      title="매도가"
-                      aria-label="매도가"
-                      className="w-full mt-1 rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm font-mono text-foreground"
-                      placeholder="매도가를 입력하면 손익이 자동 계산됩니다"
-                    />
-                  ) : (
-                    <p className="mt-1 text-lg font-semibold text-foreground">
-                      {hasSellPrice ? formatCurrency(journal.exit_price!) : '-'}
-                    </p>
-                  )}
+                  <p className="text-sm text-muted-foreground">최근 매도가</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">
+                    {rollup.lastSellPrice != null ? formatCurrency(rollup.lastSellPrice) : '-'}
+                  </p>
                 </div>
               </div>
             </Card>
 
             <Card className="p-6 bg-card border-border">
-              <h2 className="text-xl font-semibold text-foreground mb-4">매매 이유</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">매매 이유 · 시나리오</h2>
               {isEditing ? (
-                <textarea
-                  value={editData.reason || ''}
-                  onChange={(e) => updateEditData({ reason: e.target.value })}
-                  rows={6}
-                  title="매매 이유"
-                  aria-label="매매 이유"
-                  className="w-full rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground resize-none"
-                  placeholder="매매 이유를 입력하세요..."
-                />
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">진입 이유</p>
+                    <textarea
+                      value={editData.reason || ''}
+                      onChange={(e) => updateEditData({ reason: e.target.value })}
+                      rows={4}
+                      title="매매 이유"
+                      aria-label="매매 이유"
+                      className="w-full resize-none rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground"
+                      placeholder="매매 이유를 입력하세요..."
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">청산·시나리오</p>
+                    <textarea
+                      value={editData.scenario_notes || ''}
+                      onChange={(e) => updateEditData({ scenario_notes: e.target.value })}
+                      rows={4}
+                      title="시나리오 메모"
+                      aria-label="시나리오 메모"
+                      className="w-full resize-none rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground"
+                      placeholder="익절·손절·분할 매도 시나리오"
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">원칙·규칙</p>
+                    <textarea
+                      value={editData.principle_notes || ''}
+                      onChange={(e) => updateEditData({ principle_notes: e.target.value })}
+                      rows={3}
+                      title="원칙 메모"
+                      aria-label="원칙 메모"
+                      className="w-full resize-none rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground"
+                      placeholder="지킬 규칙, 금지 행동"
+                    />
+                  </div>
+                </div>
               ) : (
-                <p className="text-foreground text-base leading-relaxed">
-                  {journal.reason || '작성된 내용이 없습니다.'}
-                </p>
+                <div className="space-y-4">
+                  <p className="text-base leading-relaxed text-foreground">
+                    {journal.reason || '작성된 내용이 없습니다.'}
+                  </p>
+                  {journal.scenario_notes ? (
+                    <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                      <p className="text-xs font-medium text-muted-foreground">시나리오</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {journal.scenario_notes}
+                      </p>
+                    </div>
+                  ) : null}
+                  {journal.principle_notes ? (
+                    <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                      <p className="text-xs font-medium text-muted-foreground">원칙</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {journal.principle_notes}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
               )}
+            </Card>
+
+            <Card className="p-6 bg-card border-border">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">체결 내역</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    1차 매수, 추매, 부분매도 내역을 순서대로 기록합니다.
+                  </p>
+                </div>
+                {canWrite ? (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={fillMode === 'buy' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFillMode(fillMode === 'buy' ? null : 'buy')}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      추매 추가
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={fillMode === 'sell' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFillMode(fillMode === 'sell' ? null : 'sell')}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      매도 추가
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              {fillMode && (
+                <div className="mt-5 rounded-xl border border-border bg-secondary/30 p-4 space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground">가격</p>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatNumericInput(fillPrice)}
+                        onChange={(e) => setFillPrice(sanitizeDecimalInput(e.target.value))}
+                      title="체결 가격"
+                      aria-label="체결 가격"
+                        className="w-full mt-1 rounded-lg border border-border bg-card px-3 py-2 text-sm font-mono text-foreground"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">수량</p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumericInput(fillQuantity)}
+                        onChange={(e) => setFillQuantity(sanitizeIntegerInput(e.target.value))}
+                      title="체결 수량"
+                      aria-label="체결 수량"
+                        className="w-full mt-1 rounded-lg border border-border bg-card px-3 py-2 text-sm font-mono text-foreground"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">날짜</p>
+                      <input
+                        type="date"
+                        value={fillDate}
+                        onChange={(e) => setFillDate(e.target.value)}
+                      title="체결 날짜"
+                      aria-label="체결 날짜"
+                        className="w-full mt-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground [color-scheme:light]"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">메모</p>
+                    <input
+                      type="text"
+                      value={fillMemo}
+                      onChange={(e) => setFillMemo(e.target.value)}
+                      title="체결 메모"
+                      aria-label="체결 메모"
+                      className="w-full mt-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+                      placeholder={fillMode === 'buy' ? '예: 2차 매수' : '예: 1차 매도'}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={resetFillForm}>
+                      취소
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAddFill}
+                      disabled={fillSaving}
+                    >
+                      {fillSaving ? '저장 중...' : fillMode === 'buy' ? '추매 저장' : '매도 저장'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-5 space-y-3">
+                {fills.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
+                    아직 기록된 체결 내역이 없습니다.
+                  </div>
+                ) : (
+                  fillTimeline.map((fill) => (
+                    <div
+                      key={fill.id}
+                      className="rounded-xl border border-border bg-secondary/20 p-4"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={fill.fill_type === 'buy' ? 'default' : 'secondary'}>
+                              {fill.fill_type === 'buy' ? '매수' : '매도'}
+                            </Badge>
+                            <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-foreground">
+                              {fill.sequenceLabel}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date(fill.fill_date).toLocaleDateString('ko-KR')}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatCurrency(fill.price)} · {formatQuantity(fill.quantity)}
+                          </p>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="rounded-lg bg-background px-3 py-2 text-xs text-muted-foreground">
+                              남은 수량:{" "}
+                              <span className="font-semibold text-foreground">
+                                {formatQuantity(fill.remainingQuantity)}
+                              </span>
+                            </div>
+                            <div className="rounded-lg bg-background px-3 py-2 text-xs text-muted-foreground">
+                              잔여 평균단가:{" "}
+                              <span className="font-semibold text-foreground">
+                                {fill.remainingQuantity > 0 ? formatCurrency(fill.averageCost) : '-'}
+                              </span>
+                            </div>
+                          </div>
+                          {fill.memo && (
+                            <p className="text-sm text-muted-foreground">{fill.memo}</p>
+                          )}
+                        </div>
+                        {canWrite ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteFill(fill.id)}
+                            disabled={deletingFillId === fill.id}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </Card>
           </div>
 
           <div className="space-y-6">
             <Card className="p-6 bg-card border-border">
-              <h2 className="text-xl font-semibold text-foreground mb-4">자동 계산 결과</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">체결 요약</h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="rounded-xl border border-border bg-secondary/40 p-4">
-                  <p className="text-sm text-muted-foreground">손익</p>
-                  <p
-                    className={`mt-2 text-2xl font-bold ${
-                      !hasCalculatedMetrics
-                        ? 'text-muted-foreground'
-                        : isProfit
-                        ? 'text-profit'
-                        : 'text-loss'
-                    }`}
-                  >
-                    {hasCalculatedMetrics ? formatSignedCurrency(pnl) : '-'}
+                  <p className="text-sm text-muted-foreground">누적 매수 / 매도</p>
+                  <p className="mt-2 text-lg font-semibold text-foreground">
+                    {totalBoughtLabel} / {totalSoldLabel}
                   </p>
                 </div>
                 <div className="rounded-xl border border-border bg-secondary/40 p-4">
-                  <p className="text-sm text-muted-foreground">수익률</p>
+                  <p className="text-sm text-muted-foreground">남은 수량</p>
+                  <p className="mt-2 text-2xl font-bold text-foreground">
+                    {formatQuantity(remainingQuantity)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-secondary/40 p-4">
+                  <p className="text-sm text-muted-foreground">누적 실현 손익</p>
                   <p
                     className={`mt-2 text-2xl font-bold ${
-                      !hasCalculatedMetrics
-                        ? 'text-muted-foreground'
-                        : isProfit
-                        ? 'text-profit'
-                        : 'text-loss'
+                      isProfit ? 'text-profit' : 'text-loss'
                     }`}
                   >
-                    {hasCalculatedMetrics ? formatSignedPercent(pnlPercent, 2) : '-'}
+                    {formatSignedCurrency(realizedPnl)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-secondary/40 p-4">
+                  <p className="text-sm text-muted-foreground">누적 실현 수익률</p>
+                  <p
+                    className={`mt-2 text-2xl font-bold ${
+                      isProfit ? 'text-profit' : 'text-loss'
+                    }`}
+                  >
+                    {formatSignedPercent(realizedPercent, 2)}
                   </p>
                 </div>
               </div>
               <p className="mt-4 text-sm text-muted-foreground">
-                매도가를 입력하면 `(매도가 - 진입가) x 수량` 기준으로 자동 계산됩니다.
+                체결 내역을 기준으로 평균단가 방식으로 자동 계산됩니다.
               </p>
             </Card>
 
@@ -471,10 +792,22 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
               <h2 className="text-xl font-semibold text-foreground mb-4">전략 및 분류</h2>
               <div className="space-y-4">
                 <div>
+                  <p className="text-sm text-muted-foreground mb-2">매매 스타일</p>
+                  <JournalStyleBadge
+                    strategy={isEditing ? editData.strategy : journal.strategy}
+                    style={editTradeStyle}
+                  />
+                  {!isEditing && !inferTradeStyleFromStrategy(journal.strategy) ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      스타일 미지정 — 수정에서 스윙·단타·배당 템플릿을 적용할 수 있습니다.
+                    </p>
+                  ) : null}
+                </div>
+                <div>
                   <p className="text-sm text-muted-foreground mb-2">전략 태그</p>
                   <div className="flex flex-wrap gap-2">
-                    {journal.strategy.map((s, i) => (
-                      <Badge key={i} variant="outline">
+                    {(isEditing ? editData.strategy : journal.strategy)?.map((s, i) => (
+                      <Badge key={`${s}-${i}`} variant="outline">
                         {s}
                       </Badge>
                     ))}
@@ -482,30 +815,39 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">매매 유형</p>
-                  <Badge variant={journal.is_principle ? 'default' : 'destructive'}>
-                    {journal.is_principle ? '원칙매매' : '뇌동매매'}
-                  </Badge>
+                  {isEditing ? (
+                    <div className="flex rounded-lg border border-border overflow-hidden h-[38px] max-w-xs">
+                      <button
+                        type="button"
+                        onClick={() => updateEditData({ is_principle: true })}
+                        className={`flex-1 text-sm font-medium transition-colors ${
+                          editData.is_principle !== false
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-secondary/60 text-muted-foreground'
+                        }`}
+                      >
+                        원칙매매
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateEditData({ is_principle: false })}
+                        className={`flex-1 text-sm font-medium transition-colors ${
+                          editData.is_principle === false
+                            ? 'bg-loss text-white'
+                            : 'bg-secondary/60 text-muted-foreground'
+                        }`}
+                      >
+                        뇌동매매
+                      </button>
+                    </div>
+                  ) : (
+                    <Badge variant={journal.is_principle ? 'default' : 'destructive'}>
+                      {journal.is_principle ? '원칙매매' : '뇌동매매'}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </Card>
-
-            {journal.scenario_notes && (
-              <Card className="p-6 bg-card border-border">
-                <h2 className="text-xl font-semibold text-foreground mb-4">시나리오 노트</h2>
-                <p className="text-foreground text-base leading-relaxed">
-                  {journal.scenario_notes}
-                </p>
-              </Card>
-            )}
-
-            {journal.principle_notes && (
-              <Card className="p-6 bg-card border-border">
-                <h2 className="text-xl font-semibold text-foreground mb-4">원칙 준수 노트</h2>
-                <p className="text-foreground text-base leading-relaxed">
-                  {journal.principle_notes}
-                </p>
-              </Card>
-            )}
           </div>
         </div>
       </main>

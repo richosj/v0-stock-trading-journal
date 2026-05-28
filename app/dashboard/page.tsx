@@ -2,75 +2,23 @@
 
 import { Header } from '@/components/trading/header'
 import { OverviewCards } from '@/components/trading/overview-cards'
-import { LivePricePanel } from '@/components/trading/live-price-panel'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchAllJournals, getJournalStats } from '@/lib/trading-service'
-import { TradingJournal } from '@/lib/supabase'
-import type { LiveQuote } from '@/lib/market-quotes'
+import type { TradingJournal } from '@/lib/supabase'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Activity, LineChart, Plus } from 'lucide-react'
+import { useAuth } from '@/components/auth-provider'
+import { PageHero } from '@/components/trading/page-hero'
 
 export default function DashboardPage() {
+  const { session } = useAuth()
   const [stats, setStats] = useState<any>(null)
   const [journals, setJournals] = useState<TradingJournal[]>([])
-  const [quotes, setQuotes] = useState<LiveQuote[]>([])
-  const [quotesLoading, setQuotesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const openPositions = journals.filter((journal) => journal.exit_price == null)
-
-  const loadQuotes = useCallback(async (positions: TradingJournal[]) => {
-    if (positions.length === 0) {
-      setQuotes([])
-      return
-    }
-
-    setQuotesLoading(true)
-
-    try {
-      const response = await fetch('/api/quotes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          positions: positions.map((position) => ({
-            id: position.id,
-            ticker: position.ticker,
-            company_name: position.company_name,
-            entry_price: position.entry_price,
-            quantity: position.quantity,
-          })),
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('실시간 시세를 불러오지 못했습니다.')
-      }
-
-      const payload = await response.json()
-      setQuotes(payload.quotes ?? [])
-    } catch (quoteError) {
-      console.error('[v0] Quote load error:', quoteError)
-      setQuotes(
-        positions.map((position) => ({
-          journalId: position.id,
-          companyName: position.company_name,
-          inputTicker: position.ticker,
-          resolvedSymbol: null,
-          currency: null,
-          regularMarketPrice: null,
-          previousClose: null,
-          change: null,
-          changePercent: null,
-          marketTime: null,
-          error: '실시간 시세를 불러오지 못했습니다.',
-        }))
-      )
-    } finally {
-      setQuotesLoading(false)
-    }
-  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -81,7 +29,6 @@ export default function DashboardPage() {
         const statsData = await getJournalStats()
         setJournals(journalsData)
         setStats(statsData)
-        await loadQuotes(journalsData.filter((journal) => journal.exit_price == null))
       } catch (err: any) {
         console.error('[v0] Dashboard load error:', err)
         setError(err?.message || '데이터를 불러오지 못했습니다.')
@@ -91,7 +38,7 @@ export default function DashboardPage() {
     }
 
     loadData()
-  }, [loadQuotes])
+  }, [])
 
   if (loading) {
     return (
@@ -117,60 +64,90 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8 space-y-8">
-        {/* Title */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">대시보드</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              뇌동매매 없이, 원칙에 따른 매매를 기록하고 복기하세요.
-            </p>
-          </div>
-          <Link href="/create">
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              새 일지 작성
-            </Button>
-          </Link>
-        </div>
-
-        {/* Overview Cards */}
-        <section aria-label="대시보드 요약">
-          <OverviewCards
-            stats={stats}
-            totalTrades={journals.length}
-          />
-        </section>
-
-        <LivePricePanel
-          positions={openPositions}
-          quotes={quotes}
-          loading={quotesLoading}
-          onRefresh={() => loadQuotes(openPositions)}
+      <main className="container mx-auto px-4 py-6 space-y-6 sm:py-8 sm:space-y-8">
+        <PageHero
+          badge="트레이딩 컨트롤 센터"
+          title="대시보드"
+          description="손익 요약과 핵심 지표를 확인하세요. 실시간 보유 종목은 전용 메뉴에서 봅니다."
+          rightSlot={
+            session?.canWrite ? (
+              <Link href="/create">
+                <Button className="w-full gap-2 sm:w-auto">
+                  <Plus className="h-4 w-4" />
+                  새 일지 작성
+                </Button>
+              </Link>
+            ) : (
+              <div className="rounded-xl border border-border bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+                마스터 계정은 조회만 가능합니다.
+              </div>
+            )
+          }
+          stats={
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-xl border border-border/70 bg-background/75 px-4 py-3">
+                <p className="text-[11px] text-muted-foreground">총 거래</p>
+                <p className="mt-1 text-xl font-bold">{journals.length}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-background/75 px-4 py-3">
+                <p className="text-[11px] text-muted-foreground">진행 중</p>
+                <p className="mt-1 text-xl font-bold">{openPositions.length}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-background/75 px-4 py-3">
+                <p className="text-[11px] text-muted-foreground">원칙 비율</p>
+                <p className="mt-1 text-xl font-bold">{stats?.principleRate ?? 0}%</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-background/75 px-4 py-3">
+                <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <LineChart className="h-3 w-3" />
+                  누적 손익
+                </p>
+                <p className="mt-1 text-xl font-bold">{(stats?.totalPnL ?? 0).toLocaleString('ko-KR')}원</p>
+              </div>
+            </div>
+          }
         />
 
-        {/* Quick Links */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <section aria-label="대시보드 요약">
+          <OverviewCards stats={stats} totalTrades={journals.length} />
+        </section>
+
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Link
+            href="/holdings"
+            className="group rounded-xl border border-primary/25 bg-primary/5 p-6 transition-colors hover:bg-primary/10"
+          >
+            <div className="mb-2 inline-flex items-center gap-2 text-primary">
+              <Activity className="h-4 w-4" />
+              <span className="text-xs font-semibold uppercase tracking-wide">라이브</span>
+            </div>
+            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+              실시간 보유 종목
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              보유 {openPositions.length}종목 시세·평가손익. 모바일에서는 카드를 넘겨 확인하세요.
+            </p>
+          </Link>
+          <Link
+            href="/insights"
+            className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
+          >
+            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+              복기 인사이트
+            </h3>
+            <p className="text-sm text-muted-foreground mt-2">
+              월별 흐름, 전략 성과, 실수 패턴을 별도 화면에서 집중해서 확인하세요.
+            </p>
+          </Link>
           <Link
             href="/journal"
             className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
           >
             <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-              📊 매매 일지 목록
+              매매 일지 목록
             </h3>
             <p className="text-sm text-muted-foreground mt-2">
               모든 매매 일지를 확인하고 관리하세요.
-            </p>
-          </Link>
-          <Link
-            href="/create"
-            className="p-6 rounded-xl border border-border bg-card hover:bg-secondary/40 transition-colors group"
-          >
-            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-              ✏️ 새 일지 작성
-            </h3>
-            <p className="text-sm text-muted-foreground mt-2">
-              오늘의 매매를 기록하세요.
             </p>
           </Link>
         </section>

@@ -1,12 +1,22 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist_Mono, Noto_Sans_KR } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/components/auth-provider'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const notoSansKr = Noto_Sans_KR({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-sans-korean',
+  display: 'swap',
+})
+
+const geistMono = Geist_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono-geist',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: '매매 복기 일지 | Stock Trading Journal',
@@ -37,8 +47,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko" className="bg-background">
-      <body className="font-sans antialiased">
+    <html lang="ko" className="bg-background scroll-smooth">
+      <body className={`${notoSansKr.variable} ${geistMono.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
         </AuthProvider>

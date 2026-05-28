@@ -19,7 +19,7 @@ export type LiveQuote = {
   error: string | null
 }
 
-const COMPANY_SYMBOL_ALIASES: Record<string, string> = {
+export const COMPANY_SYMBOL_ALIASES: Record<string, string> = {
   '두산에너빌리티': '034020.KS',
   '삼성전자': '005930.KS',
   '삼성중공업': '010140.KS',

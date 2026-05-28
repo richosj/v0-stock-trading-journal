@@ -11,7 +11,12 @@ export default function CreatePage() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-foreground mb-8">새 매매 일지 작성</h1>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-foreground">새 매매 일지 작성</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            스윙 · 단타 · 배당 템플릿을 고르면 매매 이유, 시나리오, 태그, 목표/손절 가이드가 자동으로 채워집니다.
+          </p>
+        </div>
         {session?.canWrite ? (
           <JournalForm />
         ) : (

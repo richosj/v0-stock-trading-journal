@@ -30,6 +30,13 @@ import {
 } from '@/lib/trading-calculations'
 import { useAuth } from '@/components/auth-provider'
 import { getOwnerLabel } from '@/lib/auth/shared'
+import { JournalStyleEditor } from '@/components/trading/journal-style-editor'
+import { JournalStyleBadge } from '@/components/trading/journal-style-badge'
+import {
+  inferTradeStyleFromStrategy,
+  type JournalTemplatePatch,
+  type JournalTradeStyle,
+} from '@/lib/journal-templates'
 
 export default function JournalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
@@ -47,7 +54,25 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   const [fillMemo, setFillMemo] = useState('')
   const [fillSaving, setFillSaving] = useState(false)
   const [deletingFillId, setDeletingFillId] = useState<string | null>(null)
+  const [editTradeStyle, setEditTradeStyle] = useState<JournalTradeStyle | null>(null)
   const canWrite = session?.canWrite ?? false
+
+  const applyEditTemplatePatch = (patch: Partial<JournalTemplatePatch>) => {
+    setEditData((prev) => ({
+      ...prev,
+      ...(patch.reason != null ? { reason: patch.reason } : {}),
+      ...(patch.scenario_notes != null ? { scenario_notes: patch.scenario_notes } : {}),
+      ...(patch.principle_notes != null ? { principle_notes: patch.principle_notes } : {}),
+      ...(patch.is_principle != null ? { is_principle: patch.is_principle } : {}),
+      ...(patch.strategy != null ? { strategy: patch.strategy } : {}),
+      ...(patch.target_price != null ? { target_price: patch.target_price } : {}),
+      ...(patch.stop_loss != null ? { stop_loss: patch.stop_loss } : {}),
+    }))
+    if (patch.strategy) {
+      const inferred = inferTradeStyleFromStrategy(patch.strategy)
+      if (inferred) setEditTradeStyle(inferred)
+    }
+  }
 
   const updateEditData = (patch: Partial<TradingJournal>) => {
     setEditData((prev) => ({ ...prev, ...patch }))
@@ -102,7 +127,9 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
         is_principle: journal.is_principle,
         scenario_notes: journal.scenario_notes,
         principle_notes: journal.principle_notes,
+        strategy: journal.strategy,
       })
+      setEditTradeStyle(inferTradeStyleFromStrategy(journal.strategy))
       setIsEditing(true)
     }
   }
@@ -110,6 +137,7 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
   const cancelEdit = () => {
     setIsEditing(false)
     setEditData({})
+    setEditTradeStyle(null)
   }
 
   const handleSave = async () => {
@@ -121,6 +149,8 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
       if (result) {
         setJournal(result)
         setIsEditing(false)
+        setEditData({})
+        setEditTradeStyle(null)
         toast.success('수정되었습니다.')
       } else {
         toast.error('수정에 실패했습니다.')
@@ -321,8 +351,34 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">{journal.company_name}</h1>
+          <JournalStyleBadge strategy={journal.strategy} />
+          {isEditing ? (
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+              수정 중
+            </span>
+          ) : null}
+        </div>
+
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
           <div className="space-y-6">
+            {isEditing ? (
+              <Card className="border-primary/20 bg-card p-6">
+                <h2 className="mb-1 text-lg font-semibold text-foreground">매매 스타일 템플릿</h2>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  스윙·단타·배당을 다시 선택하면 이유·시나리오·태그·목표/손절을 덮어씁니다.
+                </p>
+                <JournalStyleEditor
+                  selectedStyle={editTradeStyle}
+                  onStyleChange={setEditTradeStyle}
+                  entryPrice={averageEntryPrice}
+                  existingStrategy={editData.strategy ?? journal.strategy}
+                  onApply={applyEditTemplatePatch}
+                />
+              </Card>
+            ) : null}
+
             <Card className="p-6 bg-card border-border">
               <h2 className="text-xl font-semibold text-foreground mb-4">기본 정보</h2>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -458,21 +514,68 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
             </Card>
 
             <Card className="p-6 bg-card border-border">
-              <h2 className="text-xl font-semibold text-foreground mb-4">매매 이유</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">매매 이유 · 시나리오</h2>
               {isEditing ? (
-                <textarea
-                  value={editData.reason || ''}
-                  onChange={(e) => updateEditData({ reason: e.target.value })}
-                  rows={6}
-                  title="매매 이유"
-                  aria-label="매매 이유"
-                  className="w-full rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground resize-none"
-                  placeholder="매매 이유를 입력하세요..."
-                />
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">진입 이유</p>
+                    <textarea
+                      value={editData.reason || ''}
+                      onChange={(e) => updateEditData({ reason: e.target.value })}
+                      rows={4}
+                      title="매매 이유"
+                      aria-label="매매 이유"
+                      className="w-full resize-none rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground"
+                      placeholder="매매 이유를 입력하세요..."
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">청산·시나리오</p>
+                    <textarea
+                      value={editData.scenario_notes || ''}
+                      onChange={(e) => updateEditData({ scenario_notes: e.target.value })}
+                      rows={4}
+                      title="시나리오 메모"
+                      aria-label="시나리오 메모"
+                      className="w-full resize-none rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground"
+                      placeholder="익절·손절·분할 매도 시나리오"
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">원칙·규칙</p>
+                    <textarea
+                      value={editData.principle_notes || ''}
+                      onChange={(e) => updateEditData({ principle_notes: e.target.value })}
+                      rows={3}
+                      title="원칙 메모"
+                      aria-label="원칙 메모"
+                      className="w-full resize-none rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground"
+                      placeholder="지킬 규칙, 금지 행동"
+                    />
+                  </div>
+                </div>
               ) : (
-                <p className="text-foreground text-base leading-relaxed">
-                  {journal.reason || '작성된 내용이 없습니다.'}
-                </p>
+                <div className="space-y-4">
+                  <p className="text-base leading-relaxed text-foreground">
+                    {journal.reason || '작성된 내용이 없습니다.'}
+                  </p>
+                  {journal.scenario_notes ? (
+                    <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                      <p className="text-xs font-medium text-muted-foreground">시나리오</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {journal.scenario_notes}
+                      </p>
+                    </div>
+                  ) : null}
+                  {journal.principle_notes ? (
+                    <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                      <p className="text-xs font-medium text-muted-foreground">원칙</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {journal.principle_notes}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </Card>
 
@@ -689,10 +792,22 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
               <h2 className="text-xl font-semibold text-foreground mb-4">전략 및 분류</h2>
               <div className="space-y-4">
                 <div>
+                  <p className="text-sm text-muted-foreground mb-2">매매 스타일</p>
+                  <JournalStyleBadge
+                    strategy={isEditing ? editData.strategy : journal.strategy}
+                    style={editTradeStyle}
+                  />
+                  {!isEditing && !inferTradeStyleFromStrategy(journal.strategy) ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      스타일 미지정 — 수정에서 스윙·단타·배당 템플릿을 적용할 수 있습니다.
+                    </p>
+                  ) : null}
+                </div>
+                <div>
                   <p className="text-sm text-muted-foreground mb-2">전략 태그</p>
                   <div className="flex flex-wrap gap-2">
-                    {journal.strategy.map((s, i) => (
-                      <Badge key={i} variant="outline">
+                    {(isEditing ? editData.strategy : journal.strategy)?.map((s, i) => (
+                      <Badge key={`${s}-${i}`} variant="outline">
                         {s}
                       </Badge>
                     ))}
@@ -700,30 +815,39 @@ export default function JournalDetailPage({ params }: { params: Promise<{ id: st
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">매매 유형</p>
-                  <Badge variant={journal.is_principle ? 'default' : 'destructive'}>
-                    {journal.is_principle ? '원칙매매' : '뇌동매매'}
-                  </Badge>
+                  {isEditing ? (
+                    <div className="flex rounded-lg border border-border overflow-hidden h-[38px] max-w-xs">
+                      <button
+                        type="button"
+                        onClick={() => updateEditData({ is_principle: true })}
+                        className={`flex-1 text-sm font-medium transition-colors ${
+                          editData.is_principle !== false
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-secondary/60 text-muted-foreground'
+                        }`}
+                      >
+                        원칙매매
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateEditData({ is_principle: false })}
+                        className={`flex-1 text-sm font-medium transition-colors ${
+                          editData.is_principle === false
+                            ? 'bg-loss text-white'
+                            : 'bg-secondary/60 text-muted-foreground'
+                        }`}
+                      >
+                        뇌동매매
+                      </button>
+                    </div>
+                  ) : (
+                    <Badge variant={journal.is_principle ? 'default' : 'destructive'}>
+                      {journal.is_principle ? '원칙매매' : '뇌동매매'}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </Card>
-
-            {journal.scenario_notes && (
-              <Card className="p-6 bg-card border-border">
-                <h2 className="text-xl font-semibold text-foreground mb-4">시나리오 노트</h2>
-                <p className="text-foreground text-base leading-relaxed">
-                  {journal.scenario_notes}
-                </p>
-              </Card>
-            )}
-
-            {journal.principle_notes && (
-              <Card className="p-6 bg-card border-border">
-                <h2 className="text-xl font-semibold text-foreground mb-4">원칙 준수 노트</h2>
-                <p className="text-foreground text-base leading-relaxed">
-                  {journal.principle_notes}
-                </p>
-              </Card>
-            )}
           </div>
         </div>
       </main>

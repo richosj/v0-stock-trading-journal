@@ -8,7 +8,6 @@ import {
   Pencil,
   Trash2,
   CalendarClock,
-  CircleDollarSign,
   BadgeCheck,
   AlertTriangle,
 } from "lucide-react";
@@ -24,6 +23,7 @@ import {
   formatSignedPercent,
 } from "@/lib/trading-calculations";
 import { getOwnerLabel } from "@/lib/auth/shared";
+import { JournalStyleBadge } from "@/components/trading/journal-style-badge";
 
 interface JournalTableProps {
   journals: TradingJournal[];
@@ -167,9 +167,12 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">
-                          {journal.company_name}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate font-semibold text-foreground">
+                            {journal.company_name}
+                          </p>
+                          <JournalStyleBadge strategy={journal.strategy} />
+                        </div>
                         <p className="mt-1 text-xs font-mono text-muted-foreground">
                           {journal.ticker || "티커 미입력"}
                         </p>
@@ -269,11 +272,21 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
             </div>
 
             <div className="hidden overflow-x-auto sm:block">
-              <table className="w-full min-w-[860px] text-sm">
+              <table className="w-full min-w-[920px] table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[22%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-border bg-background/60">
-                    <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground">
-                      종목명
+                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground sm:px-6">
+                      종목 · 스타일
                     </th>
                     <th className="text-right px-3 py-3 text-xs font-medium text-muted-foreground">
                       평균 매수가
@@ -330,41 +343,36 @@ export function JournalTable({ journals: initialJournals, canWrite }: JournalTab
                             : "hover:bg-secondary/20"
                         )}
                       >
-                        <td className="px-6 py-4">
-                          <Link href={`/journal/${journal.id}`} className="block hover:opacity-80">
-                            <div>
-                              <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                        <td className="px-4 py-4 sm:px-6">
+                          <Link href={`/journal/${journal.id}`} className="block min-w-0 hover:opacity-80">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate font-semibold text-foreground group-hover:text-primary transition-colors">
                                 {journal.company_name}
                               </p>
-                              <p className="text-xs font-mono text-muted-foreground mt-0.5">
-                                {journal.ticker}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {getOwnerLabel(journal.owner_key)}
-                              </p>
+                              <JournalStyleBadge strategy={journal.strategy} />
                             </div>
+                            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                              {journal.ticker || "—"}
+                            </p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                              {getOwnerLabel(journal.owner_key)}
+                            </p>
                           </Link>
                         </td>
-                        <td className="px-3 py-4 text-right font-mono text-sm text-foreground">
+                        <td className="px-3 py-4 text-right font-mono text-sm tabular-nums text-foreground">
                           {formatCurrency(journal.entry_price)}
                         </td>
-                        <td className="px-3 py-4 text-right">
-                          <span className="inline-flex items-center gap-1 font-mono text-sm text-foreground">
-                            <CircleDollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                            {formatCurrency(journal.entry_price)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-4 text-right font-mono text-sm text-foreground">
+                        <td className="px-3 py-4 text-right font-mono text-sm tabular-nums text-foreground">
                           {formatQuantity(journal.quantity)}
                         </td>
-                        <td className="px-3 py-4 text-right">
-                          <span className="font-mono text-sm text-foreground">
-                            {journal.exit_price != null ? formatCurrency(journal.exit_price) : "-"}
-                          </span>
+                        <td className="px-3 py-4 text-right font-mono text-sm tabular-nums text-foreground">
+                          {journal.exit_price != null ? formatCurrency(journal.exit_price) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
-                        <td className="px-3 py-4 text-xs font-mono text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            <CalendarClock className="h-3.5 w-3.5" />
+                        <td className="px-3 py-4 text-left text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
                             {new Date(journal.trade_date).toLocaleDateString("ko-KR")}
                           </span>
                         </td>

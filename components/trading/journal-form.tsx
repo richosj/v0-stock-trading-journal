@@ -14,6 +14,14 @@ import {
   sanitizeDecimalInput,
   sanitizeIntegerInput,
 } from "@/lib/trading-calculations";
+import {
+  buildJournalTemplatePatch,
+  inferTradeStyleFromStrategy,
+  JOURNAL_STYLE_TEMPLATE_MAP,
+  type JournalTemplatePatch,
+  type JournalTradeStyle,
+} from "@/lib/journal-templates";
+import { JournalStyleEditor } from "@/components/trading/journal-style-editor";
 
 const PRESET_TAGS = [
   "차트 돌파",
@@ -45,6 +53,7 @@ const SCENARIO_TEMPLATES = [
 ];
 
 const RECENT_TAGS_KEY = "trading_journal_recent_tags";
+const LAST_STYLE_KEY = "trading_journal_last_style";
 
 type SymbolSearchResult = {
   symbol: string;
@@ -65,6 +74,9 @@ export function JournalForm() {
   const [stopLoss, setStopLoss] = useState("");
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
+  const [scenarioNotes, setScenarioNotes] = useState("");
+  const [principleNotes, setPrincipleNotes] = useState("");
+  const [tradeStyle, setTradeStyle] = useState<JournalTradeStyle | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [customTag, setCustomTag] = useState("");
   const [recentTags, setRecentTags] = useState<string[]>([]);
@@ -165,6 +177,41 @@ export function JournalForm() {
     toast.success("시나리오 템플릿을 채웠습니다.");
   };
 
+  const applyTemplatePatch = (
+    patch: Partial<JournalTemplatePatch>,
+    options?: { silent?: boolean; style?: JournalTradeStyle }
+  ) => {
+    if (patch.reason != null) setReason(patch.reason);
+    if (patch.scenario_notes != null) setScenarioNotes(patch.scenario_notes);
+    if (patch.principle_notes != null) setPrincipleNotes(patch.principle_notes);
+    if (patch.is_principle != null) setIsPrinciple(patch.is_principle);
+    if (patch.strategy) {
+      setSelectedTags(patch.strategy);
+      const inferred = inferTradeStyleFromStrategy(patch.strategy);
+      if (inferred) setTradeStyle(inferred);
+    }
+    if (options?.style) setTradeStyle(options.style);
+    if (patch.target_price != null) setTargetPrice(String(patch.target_price));
+    if (patch.stop_loss != null) setStopLoss(String(patch.stop_loss));
+    if (patch.reason != null || patch.scenario_notes != null) {
+      setShowAdvanced(true);
+    }
+    if (options?.style && typeof window !== "undefined") {
+      window.localStorage.setItem(LAST_STYLE_KEY, options.style);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(LAST_STYLE_KEY) as JournalTradeStyle | null;
+    if (!stored) return;
+    applyTemplatePatch(buildJournalTemplatePatch(stored, { applyPrices: false }), {
+      silent: true,
+      style: stored,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
+  }, []);
+
   const applySymbolSuggestion = (item: SymbolSearchResult) => {
     setCompanyName(item.name);
     setTicker(item.symbol.replace(".KS", "").replace(".KQ", ""));
@@ -198,8 +245,8 @@ export function JournalForm() {
         exit_date: Number(sellPrice) > 0 ? new Date().toISOString().slice(0, 10) : null,
         pnl: previewMetrics?.pnl ?? null,
         pnl_percent: previewMetrics?.pnl_percent ?? null,
-        scenario_notes: null,
-        principle_notes: null,
+        scenario_notes: scenarioNotes.trim() || null,
+        principle_notes: principleNotes.trim() || null,
       });
 
       if (result) {
@@ -214,9 +261,17 @@ export function JournalForm() {
         setStopLoss("");
         setTradeDate(new Date().toISOString().slice(0, 10));
         setReason("");
+        setScenarioNotes("");
+        setPrincipleNotes("");
         setSelectedTags([]);
         setIsPrinciple(true);
         setShowAdvanced(false);
+        if (tradeStyle) {
+          applyTemplatePatch(buildJournalTemplatePatch(tradeStyle, { applyPrices: false }), {
+            silent: true,
+            style: tradeStyle,
+          });
+        }
         router.push("/journal");
       } else {
         toast.error("저장에 실패했습니다.");
@@ -232,6 +287,19 @@ export function JournalForm() {
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden max-w-5xl">
       <form onSubmit={handleSubmit} className="px-4 py-5 space-y-5 sm:px-6 sm:py-6">
+        <JournalStyleEditor
+          selectedStyle={tradeStyle}
+          onStyleChange={(style) => {
+            setTradeStyle(style);
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(LAST_STYLE_KEY, style);
+            }
+          }}
+          entryPrice={Number(entryPrice) || 0}
+          existingStrategy={selectedTags}
+          onApply={(patch) => applyTemplatePatch(patch)}
+        />
+
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-secondary/20 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-foreground">입력 모드</p>
@@ -504,10 +572,42 @@ export function JournalForm() {
                     </button>
                   </div>
                 </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    청산·시나리오 메모
+                  </label>
+                  <textarea
+                    placeholder="익절·손절·분할 매도 시나리오"
+                    value={scenarioNotes}
+                    onChange={(e) => setScenarioNotes(e.target.value)}
+                    rows={4}
+                    className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    원칙·규칙 메모
+                  </label>
+                  <textarea
+                    placeholder="지킬 규칙, 금지 행동"
+                    value={principleNotes}
+                    onChange={(e) => setPrincipleNotes(e.target.value)}
+                    rows={3}
+                    className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none leading-relaxed"
+                  />
+                </div>
               </>
             ) : (
               <div className="rounded-xl border border-dashed border-border bg-secondary/15 p-4 text-sm text-muted-foreground">
-                빠른 입력 모드입니다. 목표가, 손절가, 매매 유형은 상세 옵션에서 보완할 수 있습니다.
+                빠른 입력 모드입니다. 목표가·손절·시나리오 메모는 상세 옵션에서 보완할 수 있습니다.
+                {tradeStyle ? (
+                  <p className="mt-2 text-xs text-primary">
+                    선택한 {JOURNAL_STYLE_TEMPLATE_MAP[tradeStyle].label} 템플릿 — 상세 옵션을 열면
+                    시나리오·원칙 메모를 수정할 수 있습니다.
+                  </p>
+                ) : null}
               </div>
             )}
 

@@ -222,19 +222,32 @@ function HoldingTile({
             </div>
           </div>
 
-          <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-[11px]">
-            <div>
-              <dt className="text-muted-foreground">평가손익</dt>
-              <dd className={cn("mt-0.5 font-semibold tabular-nums", isGain ? "text-profit" : "text-loss")}>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-border/70 bg-background/80 px-3 py-2.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">내 수익금</p>
+              <p
+                className={cn(
+                  "mt-1 tabular-nums text-base font-extrabold",
+                  isGain ? "text-profit" : "text-loss"
+                )}
+              >
                 {unrealizedPnL != null ? formatSignedCurrency(unrealizedPnL) : "—"}
-              </dd>
+              </p>
             </div>
-            <div>
-              <dt className="text-muted-foreground">수익률</dt>
-              <dd className={cn("mt-0.5 font-semibold tabular-nums", isGain ? "text-profit" : "text-loss")}>
+            <div className="rounded-xl border border-border/70 bg-background/80 px-3 py-2.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">내 수익률</p>
+              <p
+                className={cn(
+                  "mt-1 tabular-nums text-base font-extrabold",
+                  isGain ? "text-profit" : "text-loss"
+                )}
+              >
                 {unrealizedPercent != null ? formatSignedPercent(unrealizedPercent, 2) : "—"}
-              </dd>
+              </p>
             </div>
+          </div>
+
+          <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-[11px]">
             <div>
               <dt className="text-muted-foreground">평가금액</dt>
               <dd className="mt-0.5 font-semibold tabular-nums text-foreground">
@@ -247,7 +260,27 @@ function HoldingTile({
                 {formatCurrency(position.entry_price)}
               </dd>
             </div>
+            <div>
+              <dt className="text-muted-foreground">보유 수량</dt>
+              <dd className="mt-0.5 font-semibold tabular-nums text-foreground">
+                {position.quantity.toLocaleString("ko-KR")}주
+              </dd>
+            </div>
+            <div />
           </dl>
+
+          <div
+            className={cn(
+              "mt-3 rounded-xl border px-3 py-2",
+              isUp ? "border-profit/25 bg-profit-muted/50" : "border-loss/25 bg-loss-muted/50"
+            )}
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">금일 등락</p>
+            <p className={cn("mt-1 tabular-nums text-sm font-bold", isUp ? "text-profit" : "text-loss")}>
+              {formatSignedQuoteCurrency(quote!.change ?? 0, quote!.currency)}
+              <span className="ml-1">({formatSignedPercent(quote!.changePercent ?? 0, 2)})</span>
+            </p>
+          </div>
         </>
       ) : (
         <div className="mt-4 flex flex-1 flex-col justify-center rounded-xl border border-dashed border-border/80 bg-muted/30 px-3 py-5 text-center">
@@ -264,6 +297,7 @@ function HoldingTile({
 
 function PortfolioHero({
   totalMarketValue,
+  totalCostBasis,
   totalUnrealizedPnL,
   totalUnrealizedPercent,
   totalDayChange,
@@ -275,6 +309,7 @@ function PortfolioHero({
   isPage,
 }: {
   totalMarketValue: number;
+  totalCostBasis: number;
   totalUnrealizedPnL: number;
   totalUnrealizedPercent: number;
   totalDayChange: number;
@@ -293,7 +328,8 @@ function PortfolioHero({
       <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-20 -left-12 h-40 w-40 rounded-full bg-profit/10 blur-3xl" />
 
-      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="relative flex flex-col gap-5">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 flex-1">
           {!isPage ? (
             <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
@@ -305,26 +341,33 @@ function PortfolioHero({
           <p className="mt-1 tabular-nums text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
             {formatCurrency(totalMarketValue)}
           </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold tabular-nums",
-                isPortfolioUp ? "bg-profit-muted text-profit" : "bg-loss-muted text-loss"
-              )}
-            >
-              {isPortfolioUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-              {formatSignedCurrency(totalUnrealizedPnL)}
-              <span className="text-xs font-medium opacity-90">
-                ({formatSignedPercent(totalUnrealizedPercent, 2)})
-              </span>
-            </span>
-            <span className="hidden h-4 w-px bg-border sm:block" aria-hidden />
-            <span className="text-xs text-muted-foreground">
-              당일{" "}
-              <span className={cn("font-semibold tabular-nums", isDayUp ? "text-profit" : "text-loss")}>
-                {formatSignedCurrency(totalDayChange)} ({formatSignedPercent(totalDayChangePercent, 2)})
-              </span>
-            </span>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">내 수익금</p>
+              <p
+                className={cn(
+                  "mt-1 inline-flex items-center gap-1 tabular-nums text-2xl font-extrabold tracking-tight",
+                  isPortfolioUp ? "text-profit" : "text-loss"
+                )}
+              >
+                {isPortfolioUp ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                {formatSignedCurrency(totalUnrealizedPnL)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">내 수익률</p>
+              <p
+                className={cn(
+                  "mt-1 tabular-nums text-2xl font-extrabold tracking-tight",
+                  isPortfolioUp ? "text-profit" : "text-loss"
+                )}
+              >
+                {formatSignedPercent(totalUnrealizedPercent, 2)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                투자원금 {formatCurrency(totalCostBasis)}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -349,6 +392,25 @@ function PortfolioHero({
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             {loading ? "갱신 중" : "새로고침"}
           </Button>
+        </div>
+      </div>
+        <div
+          className={cn(
+            "rounded-2xl border px-4 py-3",
+            isDayUp
+              ? "border-profit/25 bg-profit-muted/50"
+              : "border-loss/25 bg-loss-muted/50"
+          )}
+        >
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            금일 등락
+          </p>
+          <p className={cn("mt-1 tabular-nums text-lg font-bold", isDayUp ? "text-profit" : "text-loss")}>
+            {formatSignedCurrency(totalDayChange)}
+            <span className="ml-1 text-sm font-semibold">
+              ({formatSignedPercent(totalDayChangePercent, 2)})
+            </span>
+          </p>
         </div>
       </div>
     </div>
@@ -404,6 +466,7 @@ export function LivePricePanel({
         <>
           <PortfolioHero
             totalMarketValue={totalMarketValue}
+            totalCostBasis={totalCostBasis}
             totalUnrealizedPnL={totalUnrealizedPnL}
             totalUnrealizedPercent={totalUnrealizedPercent}
             totalDayChange={totalDayChange}

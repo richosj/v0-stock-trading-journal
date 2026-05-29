@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/carousel"
 import { cn } from "@/lib/utils"
 
-const GRID_MAX = 5
-const PAGE_SIZE = 10
+const DEFAULT_GRID_MAX = 5
+const DEFAULT_PAGE_SIZE = 10
 
 function chunk<T>(items: T[], size: number): T[][] {
   const pages: T[][] = []
@@ -30,6 +30,12 @@ type BriefCardDeckProps<T> = {
   emptyMessage: string
   getKey: (item: T, index: number) => string
   renderCard: (item: T, index: number) => React.ReactNode
+  /** 데스크톱 한 줄 카드 개수 (기본 5) */
+  desktopColumns?: 4 | 5
+  /** 이 개수 이하면 캐러셀 없이 그리드만 */
+  gridMax?: number
+  /** 캐러셀 페이지당 카드 수 */
+  pageSize?: number
 }
 
 export function BriefCardDeck<T>({
@@ -40,10 +46,14 @@ export function BriefCardDeck<T>({
   emptyMessage,
   getKey,
   renderCard,
+  desktopColumns = 5,
+  gridMax = DEFAULT_GRID_MAX,
+  pageSize = DEFAULT_PAGE_SIZE,
 }: BriefCardDeckProps<T>) {
-  const pages = useMemo(() => chunk(items, PAGE_SIZE), [items])
-  const usePagedCarousel = items.length > GRID_MAX
-  const useCompactGrid = items.length > 0 && items.length <= GRID_MAX
+  const gridClass = desktopColumns === 4 ? "lg:grid-cols-4" : "lg:grid-cols-5"
+  const pages = useMemo(() => chunk(items, pageSize), [items, pageSize])
+  const usePagedCarousel = items.length > gridMax
+  const useCompactGrid = items.length > 0 && items.length <= gridMax
 
   return (
     <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
@@ -74,7 +84,7 @@ export function BriefCardDeck<T>({
       ) : null}
 
       {useCompactGrid ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className={cn("grid grid-cols-2 gap-3", gridClass)}>
           {items.map((item, i) => (
             <div key={getKey(item, i)}>{renderCard(item, i)}</div>
           ))}
@@ -90,9 +100,9 @@ export function BriefCardDeck<T>({
             <CarouselContent className="-ml-3">
               {pages.map((page, pageIndex) => (
                 <CarouselItem key={`page-${pageIndex}`} className="pl-3 basis-full">
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                  <div className={cn("grid grid-cols-2 gap-3", gridClass)}>
                     {page.map((item, i) => {
-                      const globalIndex = pageIndex * PAGE_SIZE + i
+                      const globalIndex = pageIndex * pageSize + i
                       return (
                         <div key={getKey(item, globalIndex)}>{renderCard(item, globalIndex)}</div>
                       )

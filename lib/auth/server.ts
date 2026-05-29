@@ -4,16 +4,11 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { buildAuthSession, type AppRole, type AuthSession } from './shared'
+import { buildPinRoleMap, normalizePinInput } from './pin-config'
 import { HttpError } from '@/lib/http-error'
 
 const AUTH_COOKIE_NAME = 'trading_journal_session'
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14
-
-const PIN_ROLE_MAP: Record<string, AppRole> = {
-  [process.env.TRADING_PIN_WIFE ?? '0406']: 'wife',
-  [process.env.TRADING_PIN_OWNER ?? '0706']: 'owner',
-  [process.env.TRADING_PIN_MASTER ?? '1021']: 'master',
-}
 
 function getSessionSecret() {
   return process.env.PIN_AUTH_SECRET ?? 'v0-stock-trading-journal-pin-secret'
@@ -63,9 +58,10 @@ function parseSessionToken(token: string): AuthSession | null {
 }
 
 export function resolveSessionFromPin(pin: string) {
-  const normalizedPin = pin.trim()
-  const role = PIN_ROLE_MAP[normalizedPin]
+  const normalizedPin = normalizePinInput(pin)
+  if (!normalizedPin) return null
 
+  const role = buildPinRoleMap()[normalizedPin]
   return role ? buildAuthSession(role) : null
 }
 

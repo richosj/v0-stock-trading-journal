@@ -1,22 +1,26 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { CalendarDays, List, Plus } from 'lucide-react'
 import { Header } from '@/components/trading/header'
 import { JournalCalendar } from '@/components/trading/journal-calendar'
 import { JournalTable } from '@/components/trading/journal-table'
 import { Button } from '@/components/ui/button'
-import { useEffect, useState } from 'react'
 import { fetchAllJournals } from '@/lib/trading-service'
 import type { TradingJournal } from '@/lib/supabase'
-import Link from 'next/link'
-import { CalendarDays, Plus } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
 import { PageHero } from '@/components/trading/page-hero'
+import { cn } from '@/lib/utils'
+
+type JournalTab = 'list' | 'calendar'
 
 export default function JournalPage() {
   const { session } = useAuth()
   const [journals, setJournals] = useState<TradingJournal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<JournalTab>('list')
 
   useEffect(() => {
     const loadJournals = async () => {
@@ -40,7 +44,9 @@ export default function JournalPage() {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <div className="flex items-center justify-center h-96 text-muted-foreground text-sm">데이터 불러오는 중...</div>
+        <div className="flex h-96 items-center justify-center text-sm text-muted-foreground">
+          데이터 불러오는 중...
+        </div>
       </div>
     )
   }
@@ -49,21 +55,23 @@ export default function JournalPage() {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <div className="flex flex-col items-center justify-center h-96 gap-2">
-          <p className="text-loss text-sm font-medium">오류: {error}</p>
+        <div className="flex h-96 flex-col items-center justify-center gap-2">
+          <p className="text-sm font-medium text-loss">오류: {error}</p>
         </div>
       </div>
     )
   }
 
+  const openCount = journals.filter((journal) => journal.exit_price == null).length
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-6 space-y-6 sm:py-8 sm:space-y-7">
+      <main className="container mx-auto space-y-6 px-4 py-6 sm:space-y-7 sm:py-8">
         <PageHero
           badge="저널 & 복기"
-          title="매매 일지 목록"
-          description={`${journals.length}개의 매매 기록과 달력 복기를 한 번에 확인하세요.`}
+          title="매매 일지"
+          description="목록에서 빠르게 찾고, 달력에서 날짜별 복기 흐름을 확인하세요."
           rightSlot={
             session?.canWrite ? (
               <Link href="/create">
@@ -81,27 +89,58 @@ export default function JournalPage() {
                 <p className="mt-1 text-xl font-bold">{journals.length}</p>
               </div>
               <div className="rounded-xl border border-border/70 bg-background/75 px-4 py-3">
-                <p className="text-[11px] text-muted-foreground">진행 중 포지션</p>
-                <p className="mt-1 text-xl font-bold">
-                  {journals.filter((journal) => journal.exit_price == null).length}
-                </p>
+                <p className="text-[11px] text-muted-foreground">진행 중</p>
+                <p className="mt-1 text-xl font-bold text-warning">{openCount}</p>
               </div>
-              <div className="rounded-xl border border-border/70 bg-background/75 px-4 py-3">
+              <div className="rounded-xl border border-border/70 bg-background/75 px-4 py-3 col-span-2 sm:col-span-1">
                 <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                   <CalendarDays className="h-3 w-3" />
-                  마지막 기록일
+                  최근 기록일
                 </p>
                 <p className="mt-1 text-sm font-semibold">
-                  {journals[0]?.trade_date ? new Date(journals[0].trade_date).toLocaleDateString('ko-KR') : '-'}
+                  {journals[0]?.trade_date
+                    ? new Date(journals[0].trade_date).toLocaleDateString('ko-KR')
+                    : '-'}
                 </p>
               </div>
             </div>
           }
         />
 
-        <JournalCalendar journals={journals} />
+        <div className="inline-flex rounded-xl border border-border bg-card p-1">
+          <button
+            type="button"
+            onClick={() => setTab('list')}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+              tab === 'list'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <List className="h-4 w-4" />
+            목록
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('calendar')}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+              tab === 'calendar'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <CalendarDays className="h-4 w-4" />
+            달력 복기
+          </button>
+        </div>
 
-        <JournalTable journals={journals} canWrite={session?.canWrite ?? false} />
+        {tab === 'list' ? (
+          <JournalTable journals={journals} canWrite={session?.canWrite ?? false} />
+        ) : (
+          <JournalCalendar journals={journals} />
+        )}
       </main>
     </div>
   )

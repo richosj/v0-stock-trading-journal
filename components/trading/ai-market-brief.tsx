@@ -359,6 +359,11 @@ export function AiMarketBrief({ brief, loading, error, onRefresh }: AiMarketBrie
     : []
   const visibleWatchlist = filteredWatchlist.slice(0, 5)
   const themeSections = brief ? buildThemeSections(visibleWatchlist) : []
+  const watchlistHiddenByFilter =
+    Boolean(brief) &&
+    highScoreOnly &&
+    (brief?.watchlist.length ?? 0) > 0 &&
+    visibleWatchlist.length === 0
 
   return (
     <div className="space-y-5">
@@ -440,6 +445,20 @@ export function AiMarketBrief({ brief, loading, error, onRefresh }: AiMarketBrie
 
       {!loading && !error && brief ? (
         <>
+          {brief.watchlist.length === 0 ? (
+            <section className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-muted-foreground">
+              추천 종목이 비어 있습니다. 배포 환경에서 시장 데이터 수집이 막혔을 수 있으니 새로고침 후에도 동일하면
+              Vercel에 <span className="font-mono text-xs">GEMINI_API_KEY</span> 설정을 확인해 주세요.
+            </section>
+          ) : null}
+
+          {watchlistHiddenByFilter ? (
+            <section className="rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+              적합도 70+ 필터 때문에 표시할 종목이 없습니다. 필터를 끄면 {brief?.watchlist.length ?? 0}개 종목을
+              볼 수 있습니다.
+            </section>
+          ) : null}
+
           <section className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-foreground">추천 필터</p>
@@ -538,6 +557,9 @@ export function AiMarketBrief({ brief, loading, error, onRefresh }: AiMarketBrie
               icon={ShieldAlert}
               items={brief.holdingsCoach}
               emptyMessage="보유 종목 AI 피드백이 없습니다."
+              desktopColumns={4}
+              gridMax={4}
+              pageSize={4}
               getKey={(item, i) => `${item.ticker}-${item.name}-${i}`}
               renderCard={(item) => <HoldingCoachCard item={item} />}
             />

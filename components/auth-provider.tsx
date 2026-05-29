@@ -7,7 +7,7 @@ import type { AuthSession } from "@/lib/auth/shared";
 interface AuthContextType {
   isAuthenticated: boolean;
   session: AuthSession | null;
-  login: (password: string) => Promise<boolean>;
+  login: (password: string) => Promise<{ ok: boolean; message?: string }>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -50,25 +50,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession();
   }, []);
 
-  const login = async (password: string): Promise<boolean> => {
+  const login = async (password: string) => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pin: password }),
+        body: JSON.stringify({ pin: password.trim() }),
       });
 
+      const payload = await response.json().catch(() => null);
+
       if (!response.ok) {
-        return false;
+        return {
+          ok: false,
+          message: payload?.hint ?? payload?.error ?? "비밀번호가 올바르지 않습니다.",
+        };
       }
 
-      const payload = await response.json();
-      setSession(payload.session ?? null);
-      return true;
+      setSession(payload?.session ?? null);
+      return { ok: true };
     } catch {
-      return false;
+      return { ok: false, message: "로그인 요청에 실패했습니다. 잠시 후 다시 시도하세요." };
     }
   };
 
@@ -109,20 +113,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 function PasswordScreen({
   onLogin,
 }: {
-  onLogin: (password: string) => Promise<boolean>;
+  onLogin: (password: string) => Promise<{ ok: boolean; message?: string }>;
 }) {
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    const success = await onLogin(password);
+    const result = await onLogin(password);
     setSubmitting(false);
 
-    if (!success) {
-      setError(true);
+    if (!result.ok) {
+      setError(result.message ?? "비밀번호가 올바르지 않습니다.");
       setPassword("");
     }
   };
@@ -146,23 +150,23 @@ function PasswordScreen({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <input
-                type="password"
+                type="tel"
                 value={password}
                 onChange={(e) => {
-                  setPassword(e.target.value);
-                  setError(false);
+                  setPassword(e.target.value.replace(/\D/g, ""));
+                  setError(null);
                 }}
-                placeholder="비밀번호"
-                className="w-full rounded-lg border border-border bg-secondary/60 px-4 py-3 text-sm text-foreground text-center tracking-widest placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                placeholder="4자리 PIN"
+                className="w-full rounded-lg border border-border bg-secondary/60 px-4 py-3 text-sm text-foreground text-center tracking-[0.3em] placeholder:text-muted-foreground placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-primary/50"
                 autoFocus
+                autoComplete="one-time-code"
                 inputMode="numeric"
-                maxLength={4}
+                pattern="[0-9]*"
+                maxLength={8}
               />
-              {error && (
-                <p className="text-loss text-xs mt-2 text-center">
-                  비밀번호가 틀렸습니다.
-                </p>
-              )}
+              {error ? (
+                <p className="text-loss text-xs mt-2 text-center leading-5">{error}</p>
+              ) : null}
             </div>
             <button
               type="submit"

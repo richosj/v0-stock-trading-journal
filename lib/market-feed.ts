@@ -188,17 +188,26 @@ function parseNaverTable(html: string) {
 }
 
 export async function fetchKoreaMarketSnapshot(): Promise<KoreaMarketSnapshot> {
-  const [popularHtml, gainersHtml, activeHtml] = await Promise.all([
-    fetchEucKrHtml(`${NAVER_BASE_URL}/sise/lastsearch2.naver`),
-    fetchEucKrHtml(`${NAVER_BASE_URL}/sise/sise_rise.naver`),
-    fetchEucKrHtml(`${NAVER_BASE_URL}/sise/sise_quant.naver`),
-  ])
+  try {
+    const [popularHtml, gainersHtml, activeHtml] = await Promise.all([
+      fetchEucKrHtml(`${NAVER_BASE_URL}/sise/lastsearch2.naver`),
+      fetchEucKrHtml(`${NAVER_BASE_URL}/sise/sise_rise.naver`),
+      fetchEucKrHtml(`${NAVER_BASE_URL}/sise/sise_quant.naver`),
+    ])
 
-  return {
-    popular: parseNaverTable(popularHtml),
-    gainers: parseNaverTable(gainersHtml),
-    active: parseNaverTable(activeHtml),
-    fetchedAt: new Date().toISOString(),
+    return {
+      popular: parseNaverTable(popularHtml),
+      gainers: parseNaverTable(gainersHtml),
+      active: parseNaverTable(activeHtml),
+      fetchedAt: new Date().toISOString(),
+    }
+  } catch {
+    return {
+      popular: [],
+      gainers: [],
+      active: [],
+      fetchedAt: new Date().toISOString(),
+    }
   }
 }
 
@@ -466,24 +475,36 @@ function decodeInvestingRss(buffer: ArrayBuffer) {
 }
 
 export async function fetchUsMarketNews(holdings: UsHolding[]) {
-  const xmlBodies = await Promise.all(INVESTING_RSS_FEEDS.map((url) => fetchInvestingRssFeed(url)))
-  const parsed = xmlBodies.flatMap((xml) => (xml ? parseRssItems(xml, holdings) : []))
+  try {
+    const xmlBodies = await Promise.all(INVESTING_RSS_FEEDS.map((url) => fetchInvestingRssFeed(url)))
+    const parsed = xmlBodies.flatMap((xml) => (xml ? parseRssItems(xml, holdings) : []))
 
-  if (parsed.length === 0) {
-    throw new Error("미국 뉴스 조회 실패")
-  }
+    if (parsed.length === 0) {
+      return {
+        headlines: [],
+        related: [],
+        fetchedAt: new Date().toISOString(),
+      }
+    }
 
-  const items = mergeNewsItems(parsed).slice(0, RSS_PARSE_LIMIT)
+    const items = mergeNewsItems(parsed).slice(0, RSS_PARSE_LIMIT)
 
-  const withImages = items.filter((item) => item.imageUrl)
-  const headlinesPool = withImages.length >= 6 ? withImages : items
+    const withImages = items.filter((item) => item.imageUrl)
+    const headlinesPool = withImages.length >= 6 ? withImages : items
 
-  return {
-    headlines: headlinesPool.slice(0, GENERAL_NEWS_LIMIT),
-    related: items
-      .filter((item) => item.relatedTicker)
-      .slice(0, RELATED_NEWS_LIMIT),
-    fetchedAt: new Date().toISOString(),
+    return {
+      headlines: headlinesPool.slice(0, GENERAL_NEWS_LIMIT),
+      related: items
+        .filter((item) => item.relatedTicker)
+        .slice(0, RELATED_NEWS_LIMIT),
+      fetchedAt: new Date().toISOString(),
+    }
+  } catch {
+    return {
+      headlines: [],
+      related: [],
+      fetchedAt: new Date().toISOString(),
+    }
   }
 }
 
